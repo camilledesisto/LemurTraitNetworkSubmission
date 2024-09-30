@@ -1,0 +1,19 @@
+"","Habitat","Interaction","Variable","Estimate","Lower","Upper","Pr(>|t|)"
+"Humans_use","Multilayer","Dispersal","Human Use Proportion",0.425,-0.279,1.129,0.242
+"Humans_use1","Multilayer","Predation","Human Use Proportion",0.454,-0.204,1.111,0.186
+"Humans_use2","Multilayer","Herbivory","Human Use Proportion",0.462,-0.516,1.439,0.361
+"Humans_use3","Primary","Dispersal","Human Use Proportion",-0.035,-1.062,0.991,0.946
+"Humans_use5","Primary","Predation","Human Use Proportion",-0.015,-1.05,1.021,0.978
+"Humans_use7","Primary","Herbivory","Human Use Proportion",-0.358,-1.622,0.906,0.583
+"Humans_use4","Secondary","Dispersal","Human Use Proportion",0.89,-0.11,1.89,0.091
+"Humans_use6","Secondary","Predation","Human Use Proportion",1.367,0.185,2.549,0.034
+"Humans_use8","Secondary","Herbivory","Human Use Proportion",2.444,0.897,3.991,0.008
+"UseSum","Multilayer","Dispersal","Human Use Sum",0.062,-0.128,0.252,0.525
+"UseSum1","Multilayer","Predation","Human Use Sum",0.022,-0.117,0.162,0.755
+"UseSum2","Multilayer","Herbivory","Human Use Sum",0.164,-0.122,0.451,0.269
+"UseSum3","Primary","Dispersal","Human Use Sum",0.068,-0.253,0.389,0.68
+"UseSum5","Primary","Predation","Human Use Sum",0,-0.254,0.255,0.998
+"UseSum7","Primary","Herbivory","Human Use Sum",-0.029,-0.394,0.336,0.877
+"UseSum4","Secondary","Dispersal","Human Use Sum",0.124,-0.147,0.395,0.377
+"UseSum6","Secondary","Predation","Human Use Sum",0.126,-0.167,0.418,0.409
+"UseSum8","Secondary","Herbivory","Human Use Sum",0.714,0.191,1.236,0.018

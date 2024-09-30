@@ -1,0 +1,498 @@
+---
+title: "AmbodivoaraLemurDensity"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Set up organization}
+data_path <- "Data/"
+save_path <- "Outputs/"
+
+library(Distance); library(tidyverse); library(lme4); library(lmerTest); library(rsq); library(ggplot2);library(unmarked)
+  
+```
+
+```{r Read and clean data}
+#Import relevant data 
+survey_all <- read.csv(file = paste0(data_path,"/ambodivoara_alldat.csv"))
+survey_all <- survey_all %>% drop_na(Dis) %>% filter(An >2021)
+
+#Make separate data frames for dirunal and nocturnal lemurs
+survey_diurnal <- survey_all %>% filter(Type=="Diurnal") 
+survey_nocturnal <- survey_all %>% filter(Type=="Nocturnal")
+
+#Add effort based on transect lengths and number of repetitions
+survey_diurnal$Effort[survey_diurnal$Transect=="1"& survey_diurnal$Site=="Ambodivoara"] <- 860 * 44
+survey_diurnal$Effort[survey_diurnal$Transect=="2"& survey_diurnal$Site=="Ambodivoara"] <-1000 * 42
+survey_diurnal$Effort[survey_diurnal$Transect=="3"& survey_diurnal$Site=="Ambodivoara"] <- 1000 * 40
+survey_diurnal$Effort[survey_diurnal$Transect=="4"& survey_diurnal$Site=="Ambodivoara"] <-1000 * 40
+survey_diurnal$Effort[survey_diurnal$Transect=="5"& survey_diurnal$Site=="Ambodivoara"] <-650 * 20
+survey_diurnal$Effort[survey_diurnal$Transect=="6"& survey_diurnal$Site=="Ambodivoara"] <-1350 * 21
+
+survey_nocturnal$Effort[survey_nocturnal$Transect=="1"& survey_nocturnal$Site=="Ambodivoara"] <- 860 * 23
+survey_nocturnal$Effort[survey_nocturnal$Transect=="2"& survey_nocturnal$Site=="Ambodivoara"] <-1000 *22
+survey_nocturnal$Effort[survey_nocturnal$Transect=="3"& survey_nocturnal$Site=="Ambodivoara"] <- 1000 * 21
+survey_nocturnal$Effort[survey_nocturnal$Transect=="4"& survey_nocturnal$Site=="Ambodivoara"] <-1000 * 24
+survey_nocturnal$Effort[survey_nocturnal$Transect=="5"& survey_nocturnal$Site=="Ambodivoara"] <-650 * 21
+survey_nocturnal$Effort[survey_nocturnal$Transect=="6"& survey_nocturnal$Site=="Ambodivoara"] <-1350 * 22
+
+total_effort_km <- sum(unique(survey_diurnal$Effort)) + sum(unique(survey_nocturnal$Effort))
+
+fitstats <- function(fm) {
+
+  observed <- getY(fm@data)
+
+  expected <- fitted(fm)
+
+  resids <- residuals(fm)
+
+  sse <- sum(resids^2)
+
+  chisq <- sum((observed - expected)^2 / expected)
+
+  freeTuke <- sum((sqrt(observed) - sqrt(expected))^2)
+
+  out <- c(SSE=sse, Chisq=chisq, freemanTukey=freeTuke)
+
+  return(out)
+
+}
+
+
+```
+
+```{r Rubriventer density calculations}
+#EULEMUR RUBRIVENTER
+dists.sub <- subset(survey_diurnal, Nom_sientifique=='Eulemur_rubriventer')
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[order(dists.sub$distance), ]  
+dists.trunc <-dists.order[which(dists.order$distance < 25), ]  #remove 1 data point
+yDat <- formatDistData(dists.order, distCol="distance", transectNameCol="Transect", dist.breaks=c(0, 4, 8, 12, 16, 20)) 
+yDat <- rbind(yDat,c(0,0,0,0,0),c(0,0,0,0,0) )
+rownames(yDat) <- c(1,2,3,4,5,6)
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "2", "3", "4", "5", "6")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoka", "Savoka")
+Effort <- c(860*44, 1000*42, 1000*40, 1000*40,  28350, 13000)
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_rub <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0, 4, 8, 12, 16, 29), tlength=covs$Effort,  unitsIn="m")
+
+hist(umf_rub)
+
+m.half <- distsamp(~1 ~Habitat, umf_rub, keyfun="halfnorm", output="density", unitsOut="kmsq") #lowest AIC
+m.haz <- distsamp(~1 ~Habitat, umf_rub, keyfun="hazard", output="density", unitsOut="kmsq")
+m.uni <- distsamp(~1 ~Habitat, umf_rub, keyfun="uniform", output="density", unitsOut="kmsq")
+
+predictions_rub <- predict(m.half,type="state")
+primary_rub <- predictions_rub$Predicted[1] *average_group_size
+primary_rub_l <- primary_rub - (predictions_rub$SE[1]*average_group_size*1.96)
+primary_rub_h <- primary_rub+ (predictions_rub$SE[1]*average_group_size*1.96)
+savoko_rub <- predictions_rub$Predicted[6]*average_group_size
+savoko_rub_l <- savoko_rub- (predictions_rub$SE[6]*average_group_size*1.96)
+savoko_rub_h <- savoko_rub+ (predictions_rub$SE[6]*average_group_size*1.96)
+
+fitstats(m.half)
+(pb <- parboot(m.half, fitstats, nsim=25, report=1))
+
+```
+
+```{r Albifrons density calculations}
+#EULEMUR ALBIFRONS
+dists.sub <- subset(survey_all, Nom_sientifique=='Eulemur_albifrons')
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[order(dists.sub$distance), ]  
+dists.trunc <-dists.order # do not remove any data points, no extreme values
+yDat <- formatDistData(dists.trunc, distCol="distance", transectNameCol="Transect", dist.breaks=c(0, 4, 8, 12, 16)) 
+yDat<- rbind(yDat,c(0,0,0,0))
+
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "2", "3", "4", "6", "5")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+Effort <- c(860*44, 1000*42, 1000*40, 1000*40,  28350, 13000)
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_albi <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0, 4, 8, 12, 16), tlength=covs$Effort,  unitsIn="m")
+
+hist(umf_albi)
+
+m.half_albi <- distsamp(~1 ~Habitat, umf_albi, keyfun="halfnorm", output="density", unitsOut="kmsq") #lowest AIC
+m.haz_albi <- distsamp(~1 ~Habitat, umf_albi, keyfun="hazard", output="density", unitsOut="kmsq")
+m.uni_albi <- distsamp(~1 ~Habitat, umf_albi, keyfun="uniform", output="density", unitsOut="kmsq")
+
+m.hab <- data.frame(hab=factor(c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")))    
+predictions_albi <- predict(m.half_albi, type="state", newdata=m.hab, appendData=TRUE)
+primary_albi <- predictions_albi$Predicted[1]*average_group_size
+primary_albi_l <- primary_albi- (predictions_albi$SE[1]*average_group_size*1.96)
+primary_albi_h <- primary_albi+ (predictions_albi$SE[1]*average_group_size*1.96)
+savoko_albi <- predictions_albi$Predicted[6]*average_group_size
+savoko_albi_l <- savoko_albi- (predictions_albi$SE[6]*average_group_size*1.96)
+savoko_albi_h <- savoko_albi+ (predictions_albi$SE[6]*average_group_size*1.96)
+
+fitstats(m.half_albi)
+(pb <- parboot(m.half_albi, fitstats, nsim=25, report=1))
+
+```
+
+```{r Propithecus density calculations}
+#PROPITHECUS
+dists.sub <- subset(survey_all, Nom_sientifique=='Propithecus_candidus')
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[order(dists.sub$distance), ]  
+dists.trunc <-dists.order[dists.order$distance < 20,] #remove 2 data points
+yDat <- formatDistData(dists.trunc, distCol="Dis", transectNameCol="Transect", dist.breaks=c(0, 4,8,12,16,20)) 
+yDat <- rbind(yDat,c(0,0,0,0,0),c(0,0,0,0,0) )
+rownames(yDat) <- c(1,2,3,4,5,6)
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "3", "4", "2", "5", "6")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoka", "Savoka")
+Effort <- c(860*44, 1000*42, 1000*40, 1000*40,  28350, 13000)
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_prop <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0, 4,8,12,16,20), tlength=covs$Effort,  unitsIn="m")
+
+m.half_prop <- distsamp(~1 ~Habitat, umf_prop, keyfun="halfnorm", output="density", unitsOut="kmsq") #comparable AIC to hazard rate
+m.haz_prop <- distsamp(~1 ~Habitat, umf_prop, keyfun="hazard", output="density", unitsOut="kmsq")
+m.uni_prop <- distsamp(~1 ~Habitat, umf_prop, keyfun="uniform", output="density", unitsOut="kmsq")
+
+m.hab <- data.frame(hab=factor(c("Primary", "Primary", "Primary", "Primary", "Savoka", "Savoka")))    
+predictions_prop <- predict(m.half_prop, type="state", newdata=m.hab, appendData=TRUE)
+primary_prop <- predictions_prop$Predicted[1]*average_group_size
+primary_prop_l <- primary_prop- (predictions_prop$SE[1]*average_group_size*1.96)
+primary_prop_h <- primary_prop+ (predictions_prop$SE[1]*average_group_size*1.96)
+savoko_prop <- predictions_prop$Predicted[6]*average_group_size
+savoko_prop_l <- savoko_prop- (predictions_prop$SE[6]*average_group_size*1.96)
+savoko_prop_h <- savoko_prop+ (predictions_prop$SE[6]*average_group_size*1.96)
+
+fitstats(m.half_prop)
+(pb <- parboot(m.half_prop, fitstats, nsim=25, report=1))
+
+```
+
+```{r Hapalemur density calculations}
+#HAPALEMUR
+dists.sub <- subset(survey_all, Nom_sientifique=="Hapalemur_occidentalis")
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[order(dists.sub$distance), ]  
+dists.trunc <-dists.order[dists.order$distance < 20,]
+yDat <- formatDistData(dists.trunc, distCol="distance", transectNameCol="Transect", dist.breaks=c(0,4,8,12,16,20)) 
+
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "2", "3", "4", "5", "6")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+Effort <- c(860*44, 1000*42, 1000*40, 1000*40,  28350, 13000)
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_hapa <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0,4,8,12,16,20), tlength=covs$Effort,  unitsIn="m")
+
+
+m.half_hapa <- distsamp(~1 ~Habitat, umf_hapa, keyfun="halfnorm", output="density", unitsOut="kmsq") #lowest AIC
+m.haz_hapa <- distsamp(~1 ~Habitat, umf_hapa, keyfun="hazard", output="density", unitsOut="kmsq") 
+m.uni_hapa <- distsamp(~1 ~Habitat, umf_hapa, keyfun="uniform", output="density", unitsOut="kmsq")
+
+
+m.hab <- data.frame(hab=factor(c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")))    
+predictions_hapa <- predict(m.half_hapa, type="state", newdata=m.hab, appendData=TRUE)
+primary_hapa <- predictions_hapa$Predicted[1]*average_group_size
+primary_hapa_l <- primary_hapa- (predictions_hapa$SE[1]*average_group_size*1.96)
+primary_hapa_h <- primary_hapa+ (predictions_hapa$SE[1]*average_group_size*1.96)
+savoko_hapa <- predictions_hapa$Predicted[6]*average_group_size
+savoko_hapa_l <- savoko_hapa- (predictions_hapa$SE[6]*average_group_size*1.96)
+savoko_hapa_h <- savoko_hapa+ (predictions_hapa$SE[6]*average_group_size*1.96)
+
+fitstats(m.half_hapa)
+(pb <- parboot(m.half_hapa, fitstats, nsim=25, report=1))
+
+```
+
+```{r Allocebus density calculations}
+#ALLOCEBUS
+dists.sub <- subset(survey_all, Nom_sientifique=='Allocebus_trichotis')
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[!is.na(dists.sub$distance),] #dont remove any data points
+yDat <- formatDistData(dists.order, distCol="distance", transectNameCol="Transect", dist.breaks=c(0, 4,8,12,16,20))
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "2", "3", "4", "5", "6")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+Effort <- c(860*23, 1000*22, 1000*21, 1000*24,  28350, 13000)
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_allo <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0, 4,8,12,16,20), tlength=covs$Effort,  unitsIn="m")
+
+hist(umf_allo)
+
+m.half_allo <- distsamp(~1 ~Habitat, umf_allo, keyfun="halfnorm", output="density", unitsOut="kmsq") 
+m.haz_allo <- distsamp(~1 ~Habitat, umf_allo, keyfun="hazard", output="density", unitsOut="kmsq")#lowest AIC
+m.uni_allo <- distsamp(~1 ~Habitat, umf_allo, keyfun="uniform", output="density", unitsOut="kmsq")
+
+m.hab <- data.frame(hab=factor(c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")))    
+predictions_allo <- predict(m.haz_allo, type="state", newdata=m.hab, appendData=TRUE)
+primary_allo <- predictions_allo$Predicted[1]*average_group_size
+primary_allo_l <- primary_allo- (predictions_allo$SE[1]*average_group_size*1.96)
+primary_allo_h <- primary_allo+ (predictions_allo$SE[1]*average_group_size*1.96)
+savoko_allo <- predictions_allo$Predicted[6]*average_group_size
+savoko_allo_l <- savoko_allo- (predictions_allo$SE[6]*average_group_size*1.96)
+savoko_allo_h <- savoko_allo+ (predictions_allo$SE[6]*average_group_size*1.96)
+
+fitstats(m.haz_allo)
+(pb <- parboot(m.haz_allo, fitstats, nsim=25, report=1))
+
+```
+
+```{r Microcebus density calculations}
+#MICROCEBUS
+dists.sub <- subset(survey_all, Nom_sientifique=='Microcebus_lehilahytsara')
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[order(dists.sub$distance), ]  
+dists.trunc <-dists.order[dists.order$distance < 28,]#remove 3 points
+yDat <- formatDistData(dists.trunc, distCol="distance", transectNameCol="Transect", dist.breaks=c(0,5,10,15,20,25,30)) 
+
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "2", "3", "4", "5", "6")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+Effort <- c(860*23, 1000*22, 1000*21, 1000*24,  28350, 13000)
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_micro <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0,5,10,15,20,25,30), tlength=covs$Effort,  unitsIn="m")
+
+hist(umf_micro)
+
+m.half_micro <- distsamp(~1 ~Habitat, umf_micro, keyfun="halfnorm", output="density", unitsOut="kmsq")
+m.haz_micro <- distsamp(~1 ~Habitat, umf_micro, keyfun="hazard", output="density", unitsOut="kmsq") #lower AIC
+m.uni_micro <- distsamp(~1 ~Habitat, umf_micro, keyfun="uniform", output="density", unitsOut="kmsq")
+
+m.hab <- data.frame(hab=factor(c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")))    
+predictions_micro <- predict(m.haz_micro, type="state", newdata=m.hab, appendData=TRUE)
+primary_micro <- predictions_micro$Predicted[1]*average_group_size
+primary_micro_l <- primary_micro- (predictions_micro$SE[1]*average_group_size*1.96)
+primary_micro_h <- primary_micro+ (predictions_micro$SE[1]*average_group_size*1.96)
+savoko_micro <- predictions_micro$Predicted[6]*average_group_size
+savoko_micro_l <- savoko_micro- (predictions_micro$SE[6]*average_group_size*1.96)
+savoko_micro_h <- savoko_micro+ (predictions_micro$SE[6]*average_group_size*1.96)
+
+fitstats(m.haz_micro)
+(pb <- parboot(m.haz_micro, fitstats, nsim=25, report=1))
+
+```
+
+```{r Avahi density calculations}
+#Avahi
+dists.sub <- subset(survey_all, Nom_sientifique=='Avahi_laniger')
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[order(dists.sub$distance), ]  
+#dists.trunc <-dists.order[dists.order$distance < 25,]
+yDat <- formatDistData(dists.order, distCol="distance", transectNameCol="Transect", dist.breaks=c(0, 6, 12, 18, 24, 28)) 
+
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "2", "3", "4", "5", "6")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+Effort <- c(860*23, 1000*22, 1000*21, 1000*24,  28350, 13000)
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_avahi <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0, 6, 12, 18, 24, 28), tlength=covs$Effort,  unitsIn="m")
+
+hist(umf_avahi)
+
+m.half_avahi <- distsamp(~1 ~Habitat, umf_avahi, keyfun="halfnorm", output="density", unitsOut="kmsq")
+m.haz_avahi <- distsamp(~1 ~Habitat, umf_avahi, keyfun="hazard", output="density", unitsOut="kmsq") #lowest AIC
+m.uni_avahi <- distsamp(~1 ~Habitat, umf_avahi, keyfun="uniform", output="density", unitsOut="kmsq")
+
+m.hab <- data.frame(hab=factor(c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")))    
+predictions_avahi <- predict(m.haz_avahi, type="state", newdata=m.hab, appendData=TRUE)
+primary_avahi <- predictions_avahi$Predicted[1]*average_group_size
+primary_avahi_l <- primary_avahi - (predictions_avahi$SE[1]*average_group_size*1.96)
+primary_avahi_h <- primary_avahi+ (predictions_avahi$SE[1]*average_group_size*1.96)
+savoko_avahi <- predictions_avahi$Predicted[6]*average_group_size
+savoko_avahi_l <- savoko_avahi- (predictions_avahi$SE[6]*average_group_size*1.96)
+savoko_avahi_h <- savoko_avahi + (predictions_avahi$SE[6]*average_group_size*1.96)
+
+fitstats(m.haz_avahi)
+(pb <- parboot(m.haz_avahi, fitstats, nsim=25, report=1))
+
+```
+
+```{r Lepilemur density calculations}
+#Lepilemur
+dists.sub <- subset(survey_all, Nom_sientifique=='Lepilemur_seali')
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[order(dists.sub$distance), ]  
+#dists.trunc <-dists.order[dists.order$distance < 25,]
+yDat <- formatDistData(dists.order, distCol="distance", transectNameCol="Transect", dist.breaks=c(0, 5,10,15,20,25,30)) 
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "2", "3", "4", "5", "6")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+Effort <- c(860*23, 1000*22, 1000*21, 1000*24,  28350, 13000)
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_lepi <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0, 5,10,15,20,25,30), tlength=covs$Effort,  unitsIn="m")
+
+hist(umf_lepi)
+
+m.half_lepi <- distsamp(~1 ~Habitat, umf_lepi, keyfun="halfnorm", output="density", unitsOut="kmsq")#comparable to hazard rate function
+m.haz_lepi <- distsamp(~1 ~Habitat, umf_lepi, keyfun="hazard", output="density", unitsOut="kmsq") 
+m.uni_lepi <- distsamp(~1 ~Habitat, umf_lepi, keyfun="uniform", output="density", unitsOut="kmsq")
+
+m.hab <- data.frame(hab=factor(c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")))    
+predictions_lepi <- predict(m.half_lepi, type="state", newdata=m.hab, appendData=TRUE)
+primary_lepi <- predictions_lepi$Predicted[1]*average_group_size
+primary_lepi_l <- primary_lepi -(predictions_lepi$SE[1]*average_group_size*1.96)
+primary_lepi_h <- primary_lepi+ (predictions_lepi$SE[1]*average_group_size*1.96)
+savoko_lepi <- predictions_lepi$Predicted[6]*average_group_size
+savoko_lepi_l <-savoko_lepi- (predictions_lepi$SE[6]*average_group_size*1.96)
+savoko_lepi_h <- savoko_lepi+ (predictions_lepi$SE[6]*average_group_size*1.96)
+primary_lepi_sd <- predictions_lepi$Predicted[1]*average_group_size
+
+fitstats(m.half_lepi)
+(pb <- parboot(m.half_lepi, fitstats, nsim=100, report=1))
+
+```
+
+```{r Cheiro density calculations}
+#Cheiro
+dists.sub <- subset(survey_all, Nom_sientifique=='Cheirogaleus_crossleyi')
+dists.sub <- dists.sub %>% filter(Mois !=6, Mois !=7)
+dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
+dists.order <- dists.sub[order(dists.sub$distance), ]  
+dists.trunc <-dists.order[dists.order$distance < 30,]#remove 4 points
+yDat <- formatDistData(dists.trunc, distCol="distance", transectNameCol="Transect", dist.breaks=c(0, 5, 10, 15, 20, 25,30)) 
+
+dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
+average_group_size <- mean(dists.sub$N_ind[!is.na(dists.sub$N_ind)])
+
+Transect <- c("1", "2", "3", "4", "5", "6")
+Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+Effort <- c(c(860 *4, 1000 *4 , 1000 *4 , 1000 *4 , 7800, 14850)) #efforts only based on repetitions during the time period when cheiros where not in torpor 
+covs <- data.frame(Transect, Habitat, Effort)
+
+umf_cheiro <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist.breaks=c(0, 5, 10, 15, 20, 25, 30), tlength=covs$Effort,  unitsIn="m")
+
+hist(umf_cheiro)
+
+m.half_cheiro <- distsamp(~1 ~Habitat, umf_cheiro, keyfun="halfnorm", output="density", unitsOut="kmsq")#lowest AIC
+m.haz_cheiro <- distsamp(~1 ~Habitat, umf_cheiro, keyfun="hazard", output="density", unitsOut="kmsq") 
+m.uni_cheiro <- distsamp(~1 ~Habitat, umf_cheiro, keyfun="uniform", output="density", unitsOut="kmsq")
+
+
+m.hab <- data.frame(hab=factor(c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")))    
+predictions_cheiro <- predict(m.half_cheiro, type="state", newdata=m.hab, appendData=TRUE)
+primary_cheiro <- predictions_cheiro$Predicted[1]*average_group_size
+primary_cheiro_l <- primary_cheiro -(predictions_cheiro$SE[1]*average_group_size*1.96)
+primary_cheiro_h <- primary_cheiro+ (predictions_cheiro$SE[1]*average_group_size*1.96)
+savoko_cheiro <- predictions_cheiro$Predicted[6]*average_group_size
+savoko_cheiro_l <-savoko_cheiro- (predictions_cheiro$SE[6]*average_group_size*1.96)
+savoko_cheiro_h <- savoko_cheiro+ (predictions_cheiro$SE[6]*average_group_size*1.96)
+primary_cheiro_sd <- predictions_cheiro$Predicted[1]*average_group_size
+
+fitstats(m.half_cheiro)
+(pb <- parboot(m.half_cheiro, fitstats, nsim=100, report=1))
+
+```
+
+```{r Summary}
+
+primary <- c(primary_rub, primary_albi, primary_hapa, primary_prop, primary_allo, primary_micro, primary_lepi, primary_avahi, primary_cheiro)
+primary_l <- c(primary_rub_l, primary_albi_l, primary_hapa_l, primary_prop_l, primary_allo_l, primary_micro_l, primary_lepi_l, primary_avahi_l, primary_cheiro_l)
+primary_h <- c(primary_rub_h, primary_albi_h, primary_hapa_h, primary_prop_h, primary_allo_h, primary_micro_h, primary_lepi_h, primary_avahi_h, primary_cheiro_h)
+savoko <- c(savoko_rub, savoko_albi, savoko_hapa, savoko_prop, savoko_allo, savoko_micro, savoko_lepi, savoko_avahi, savoko_cheiro)
+savoko_l <- c(savoko_rub_l, savoko_albi_l, savoko_hapa_l, savoko_prop_l, savoko_allo_l, savoko_micro_l, savoko_lepi_l, savoko_avahi_l, savoko_cheiro_l)
+savoko_h <- c(savoko_rub_h, savoko_albi_h, savoko_hapa_h, savoko_prop_h, savoko_allo_h, savoko_micro_h, savoko_lepi_h, savoko_avahi_h, savoko_cheiro_h)
+lemur <- c("Eulemur_rubriventer", "Eulemur_albifrons", "Hapalemur_occidentalis", "Propithecus_candidus",
+            "Allocebus_trichotis", "Microcebus_lehilahytsara", "Lepilemur_seali","Avahi_laniger", "Cheirogaleus_crossleyi")
+length(lemur)
+length(primary)
+length(savoko)
+
+lemur_density <- data.frame(lemur, primary,primary_l, primary_h, savoko, savoko_l, savoko_h)
+lemur_density[10,]<- c("Daubentonia_madagascariensis",0, 0,0,0,0,0)#No aye-ayes observed ever in the study
+
+lemur_density2 <- lemur_density %>% pivot_longer(cols=primary:savoko_h, names_to = "Habitat", values_to= "Density") %>% separate(Habitat, into = c("Habitat", "Value"), sep = "_")
+lemur_density2$Value[is.na(lemur_density2$Value)] <- "Estimate"
+lemur_density2$Value[lemur_density2$Value=="l"] <- "Lower"
+lemur_density2$Value[lemur_density2$Value=="h"] <- "Upper"
+lemur_density2$Habitat[lemur_density2$Habitat=="primary"] <- "Primary"
+lemur_density2$Habitat[lemur_density2$Habitat=="savoko"] <- "Secondary"
+lemur_density2 <- lemur_density2 %>% pivot_wider(names_from=Value, values_from=Density)
+lemur_density2$Estimate <- as.numeric(lemur_density2$Estimate)
+lemur_density2$Lower <- as.numeric(lemur_density2$Lower)
+lemur_density2$Upper <- as.numeric(lemur_density2$Upper)
+lemur_density2$lemur[lemur_density2$lemur=="Allocebus_trichotis"] <- "A. trichotis"
+lemur_density2$lemur[lemur_density2$lemur=="Avahi_laniger"] <- "A. laniger"
+lemur_density2$lemur[lemur_density2$lemur=="Eulemur_albifrons"] <- "E. albifrons"
+lemur_density2$lemur[lemur_density2$lemur=="Eulemur_rubriventer"] <- "E. rubriventer"
+lemur_density2$lemur[lemur_density2$lemur=="Hapalemur_occidentalis"] <- "H. occidentalis"
+lemur_density2$lemur[lemur_density2$lemur=="Lepilemur_seali"] <- "L. seali"
+lemur_density2$lemur[lemur_density2$lemur=="Microcebus_lehilahytsara"] <-"M. lehilahytsara"
+lemur_density2$lemur[lemur_density2$lemur=="Propithecus_candidus"] <-"P. candidus"
+lemur_density2$lemur[lemur_density2$lemur=="Cheirogaleus_crossleyi"] <-"C. crossleyi" 
+lemur_density2$lemur[lemur_density2$lemur=="Daubentonia_madagascariensis"] <-"D. madagascariensis" 
+lemur_density2$shape <- lemur_density2$Estimate
+lemur_density2$shape[lemur_density2$shape==0]<- "NoData"
+lemur_density2$shape[lemur_density2$shape!="NoData"]<- "xData"
+
+lemur_diversity_plot2 <-ggplot(data=lemur_density2, aes(x= lemur, y=Estimate, color=Habitat, alpha=shape))+
+  scale_color_manual(values = c("darkseagreen3", "lightgoldenrod2"))+
+   geom_pointrange(aes(ymin=Lower, ymax=Upper), size=0.4,
+                 position=position_dodge(.5))+
+  theme_classic()+
+  ylab("Density (ind./ha)")+
+  xlab("Lemur Species")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 7))+
+  guides(fill=guide_legend(title="Land Use"), alpha=FALSE)+
+  scale_alpha_manual(values= c(0.2,1), name="Land Use")+
+  labs(color = "Land Use")
+
+lemur_diversity_plot <- ggplot(data=lemur_density2, aes(x= lemur, y=Estimate, fill=Habitat, alpha=shape))+
+  scale_fill_manual(values = c("darkseagreen3", "lightgoldenrod2"))+
+   scale_color_manual(values = c("seagreen4", "darkgoldenrod3"))+
+  geom_col(position = "dodge")+
+   geom_errorbar(aes(ymin=Lower, ymax=Upper,color=Habitat), size=0.7, width=.5,
+                 position=position_dodge(0.9))+
+  theme_classic()+
+  ylab("Density (ind./ha)")+
+  xlab("Lemur Species")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))+
+  guides(fill=guide_legend(title=NULL), alpha=FALSE)+
+  scale_alpha_manual(values= c(0.2,1))+ theme(legend.position="right")
+
+```
+
+```{r Save densities}
+
+lemur_density3 <- lemur_density2 %>% mutate(Estimate = round(Estimate, 0),Lower = round(Lower, 0), Upper = round(Upper, 0))%>% dplyr::select(-shape)%>% dplyr::select(Habitat, lemur, Estimate, Lower, Upper) %>% rename(Lemur = lemur) %>% arrange(Habitat)
+
+lemur_density4 <- lemur_density2 %>% mutate(Estimate = round(Estimate, 3),Lower = round(Lower, 3), Upper = round(Upper, 3))%>% dplyr::select(-shape)%>% dplyr::select(Habitat, lemur, Estimate, Lower, Upper) %>% rename(Lemur = lemur) %>% arrange(Habitat)
+
+write.csv(lemur_density3, file=paste0(data_path, "lemur_densities_round.csv"))
+write.csv(lemur_density4, file=paste0(data_path, "lemur_densities_round2.csv"))
+write.csv(lemur_density2, file=paste0(data_path, "lemur_densities.csv"))
+write.csv(lemur_density, file=paste0(data_path, "lemur_density.csv"))
+
+```
+
