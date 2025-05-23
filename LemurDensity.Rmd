@@ -25,19 +25,19 @@ survey_diurnal <- survey_all %>% filter(Type=="Diurnal")
 survey_nocturnal <- survey_all %>% filter(Type=="Nocturnal")
 
 #Add effort based on transect lengths and number of repetitions
-survey_diurnal$Effort[survey_diurnal$Transect=="1"& survey_diurnal$Site=="Ambodivoara"] <- 860 * 44
-survey_diurnal$Effort[survey_diurnal$Transect=="2"& survey_diurnal$Site=="Ambodivoara"] <-1000 * 42
-survey_diurnal$Effort[survey_diurnal$Transect=="3"& survey_diurnal$Site=="Ambodivoara"] <- 1000 * 40
-survey_diurnal$Effort[survey_diurnal$Transect=="4"& survey_diurnal$Site=="Ambodivoara"] <-1000 * 40
-survey_diurnal$Effort[survey_diurnal$Transect=="5"& survey_diurnal$Site=="Ambodivoara"] <-650 * 20
-survey_diurnal$Effort[survey_diurnal$Transect=="6"& survey_diurnal$Site=="Ambodivoara"] <-1350 * 21
+survey_diurnal$Effort[survey_diurnal$Transect=="1"] <- 860 * 44
+survey_diurnal$Effort[survey_diurnal$Transect=="2"] <-1000 * 42
+survey_diurnal$Effort[survey_diurnal$Transect=="3"] <- 1000 * 40
+survey_diurnal$Effort[survey_diurnal$Transect=="4"] <-1000 * 40
+survey_diurnal$Effort[survey_diurnal$Transect=="5"] <-650 * 20
+survey_diurnal$Effort[survey_diurnal$Transect=="6"] <-1350 * 21
 
-survey_nocturnal$Effort[survey_nocturnal$Transect=="1"& survey_nocturnal$Site=="Ambodivoara"] <- 860 * 23
-survey_nocturnal$Effort[survey_nocturnal$Transect=="2"& survey_nocturnal$Site=="Ambodivoara"] <-1000 *22
-survey_nocturnal$Effort[survey_nocturnal$Transect=="3"& survey_nocturnal$Site=="Ambodivoara"] <- 1000 * 21
-survey_nocturnal$Effort[survey_nocturnal$Transect=="4"& survey_nocturnal$Site=="Ambodivoara"] <-1000 * 24
-survey_nocturnal$Effort[survey_nocturnal$Transect=="5"& survey_nocturnal$Site=="Ambodivoara"] <-650 * 21
-survey_nocturnal$Effort[survey_nocturnal$Transect=="6"& survey_nocturnal$Site=="Ambodivoara"] <-1350 * 22
+survey_nocturnal$Effort[survey_nocturnal$Transect=="1"] <- 860 * 23
+survey_nocturnal$Effort[survey_nocturnal$Transect=="2"] <-1000 *22
+survey_nocturnal$Effort[survey_nocturnal$Transect=="3"] <- 1000 * 21
+survey_nocturnal$Effort[survey_nocturnal$Transect=="4"] <-1000 * 24
+survey_nocturnal$Effort[survey_nocturnal$Transect=="5"] <-650 * 21
+survey_nocturnal$Effort[survey_nocturnal$Transect=="6"] <-1350 * 22
 
 total_effort_km <- sum(unique(survey_diurnal$Effort)) + sum(unique(survey_nocturnal$Effort))
 
@@ -86,9 +86,9 @@ umf_rub <- unmarkedFrameDS(y=as.matrix(yDat), siteCovs=covs, survey="line", dist
 
 hist(umf_rub)
 
-m.half <- distsamp(~1 ~Habitat, umf_rub, keyfun="halfnorm", output="density", unitsOut="kmsq") #lowest AIC
-m.haz <- distsamp(~1 ~Habitat, umf_rub, keyfun="hazard", output="density", unitsOut="kmsq")
-m.uni <- distsamp(~1 ~Habitat, umf_rub, keyfun="uniform", output="density", unitsOut="kmsq")
+m.half_rub <- distsamp(~1 ~Habitat, umf_rub, keyfun="halfnorm", output="density", unitsOut="kmsq") #lowest AIC
+m.haz_rub <- distsamp(~1 ~Habitat, umf_rub, keyfun="hazard", output="density", unitsOut="kmsq")
+m.uni_rub <- distsamp(~1 ~Habitat, umf_rub, keyfun="uniform", output="density", unitsOut="kmsq")
 
 predictions_rub <- predict(m.half,type="state")
 primary_rub <- predictions_rub$Predicted[1] *average_group_size
@@ -100,6 +100,120 @@ savoko_rub_h <- savoko_rub+ (predictions_rub$SE[6]*average_group_size*1.96)
 
 fitstats(m.half)
 (pb <- parboot(m.half, fitstats, nsim=25, report=1))
+
+
+#posterior samples
+abundance_samples_rub <- posteriorSamples(m.half_rub, nsims = 100)
+
+abundance_samples_rub <-as.data.frame(abundance_samples_rub@samples)
+
+abundance_samples_rub$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+
+abundance_samples_rub$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
+
+abundance_samples2_rub <-abundance_samples_rub%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_rub$value2 <- abundance_samples2_rub$value * abundance_samples2$weight
+abundance_samples3_rub <- abundance_samples2_rub %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+fitted_vals <- fitted(m.half)        # predicted detection matrix
+obs_vals <- getY(m.half@data)       # observed detection matrix
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+# Run Shapiro-Wilk test
+shapiro.test(residuals)
+
+
+
+detection_matrix <- getY(umf_rub)  # rows = sites, cols = distance bins
+total_detections <- colSums(detection_matrix)  # total detections per distance bin
+
+if (exists("dist_breaks") && length(dist_breaks) == (ncol(detection_matrix) + 1)) {
+  bin_labels <- paste0(dist_breaks[-length(dist_breaks)], "-", dist_breaks[-1])
+} else {
+  warning("dist_breaks not provided or inconsistent — using generic labels")
+  bin_labels <- paste0("Bin_", seq_len(ncol(detection_matrix)))
+}
+
+
+hist_df <- tibble(
+  Bin = factor(bin_labels, levels = bin_labels),
+  Detections = total_detections
+)
+
+rubri_bar <- ggplot(hist_df, aes(x = Bin, y = Detections)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_classic() +
+  xlab("Distance bin (m)") +
+  ylab("Number of detections")
+
+
+
+sigma_hat <- backTransform(m.half, type="det")@estimate
+
+dist.breaks <- c(0, 4, 8, 12, 16, 20)
+
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+
+# Evaluate the density function (not detection prob) at midpoints
+# dxhn = PDF of half-normal key function
+detection_pdf <- dxhn(bin_mids, sigma = sigma_hat)
+
+# Scale density to match the histogram height for visual overlay
+detection_scaled <- detection_pdf / max(detection_pdf) * max(total_detections)
+
+
+```
+
+```{r E. rubriventer plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_rub)
+total_detections <- colSums(detection_matrix)
+
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0, 4, 8, 12, 16, 20)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
+
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
+
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.half, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+rubri_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size = 0.8, linetype = "dashed") +
+  labs(
+    title = "E. rubriventer",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
 
 ```
 
@@ -141,6 +255,83 @@ savoko_albi_h <- savoko_albi+ (predictions_albi$SE[6]*average_group_size*1.96)
 fitstats(m.half_albi)
 (pb <- parboot(m.half_albi, fitstats, nsim=25, report=1))
 
+
+#posterior samples
+abundance_samples_albi <- posteriorSamples(m.half_albi, nsims = 100)
+
+abundance_samples_albi <-as.data.frame(abundance_samples_albi@samples)
+
+abundance_samples_albi$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+
+abundance_samples_albi$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
+
+abundance_samples2_albi <-abundance_samples_albi%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_albi$value2 <- abundance_samples2_albi$value * abundance_samples2$weight
+abundance_samples3_albi <- abundance_samples2_albi %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+
+
+fitted_vals <- fitted(m.half_albi)        # predicted detection matrix
+obs_vals <- getY(m.half_albi@data)       # observed detection matrix
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+# Run Shapiro-Wilk test
+shapiro.test(residuals)
+
+
+```
+
+```{r E. albifrons plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_albi)
+total_detections <- colSums(detection_matrix)
+
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0, 4, 8, 12, 16)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
+
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
+
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.half_albi, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+albi_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size = 0.8, linetype = "dashed") +
+  labs(
+    title = "E. albifrons",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
+
 ```
 
 ```{r Propithecus density calculations}
@@ -178,6 +369,85 @@ savoko_prop_h <- savoko_prop+ (predictions_prop$SE[6]*average_group_size*1.96)
 
 fitstats(m.half_prop)
 (pb <- parboot(m.half_prop, fitstats, nsim=25, report=1))
+
+
+
+#posterior samples
+abundance_samples_prop <- posteriorSamples(m.half_prop, nsims = 100)
+
+abundance_samples_prop <-as.data.frame(abundance_samples_prop@samples)
+
+abundance_samples_prop$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+
+abundance_samples_prop$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
+
+abundance_samples2_prop <-abundance_samples_prop%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_prop$value2 <- abundance_samples2_prop$value * abundance_samples2$weight
+abundance_samples3_prop <- abundance_samples2_prop %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+
+
+fitted_vals <- fitted(m.half_prop)        # predicted detection matrix
+obs_vals <- getY(m.half_prop@data)       # observed detection matrix
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+# Run Shapiro-Wilk test
+shapiro.test(residuals)
+
+
+
+```
+
+```{r P. candidus plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_prop)
+total_detections <- colSums(detection_matrix)
+
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0, 4,8,12,16,20)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
+
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
+
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.half_prop, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+prop_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size =0.8, linetype="dashed") +
+  labs(
+    title = "P. candidus",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
 
 ```
 
@@ -218,6 +488,83 @@ savoko_hapa_h <- savoko_hapa+ (predictions_hapa$SE[6]*average_group_size*1.96)
 fitstats(m.half_hapa)
 (pb <- parboot(m.half_hapa, fitstats, nsim=25, report=1))
 
+
+#posterior samples
+abundance_samples_hapa <- posteriorSamples(m.half_hapa, nsims = 100)
+
+abundance_samples_hapa <-as.data.frame(abundance_samples_hapa@samples)
+
+abundance_samples_hapa$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+
+abundance_samples_hapa$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
+
+abundance_samples2_hapa <-abundance_samples_hapa%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_hapa$value2 <- abundance_samples2_hapa$value * abundance_samples2$weight
+abundance_samples3_hapa <- abundance_samples2_hapa %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+
+fitted_vals <- fitted(m.half_hapa)        # predicted detection matrix
+obs_vals <- getY(m.half_hapa@data)       # observed detection matrix
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+# Run Shapiro-Wilk test
+shapiro.test(residuals)
+
+
+
+```
+
+```{r H. occidentalis plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_hapa)
+total_detections <- colSums(detection_matrix)
+
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0,4,8,12,16,20)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
+
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
+
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.half_hapa, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+hapa_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size = 0.8, linetype="dashed") +
+  labs(
+    title = "H. occidentalis",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
+
 ```
 
 ```{r Allocebus density calculations}
@@ -254,6 +601,84 @@ savoko_allo_h <- savoko_allo+ (predictions_allo$SE[6]*average_group_size*1.96)
 
 fitstats(m.haz_allo)
 (pb <- parboot(m.haz_allo, fitstats, nsim=25, report=1))
+
+
+
+#posterior samples
+abundance_samples_allo <- posteriorSamples(m.half_allo, nsims = 100)
+
+abundance_samples_allo <-as.data.frame(abundance_samples_allo@samples)
+
+abundance_samples_allo$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+
+abundance_samples_allo$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
+
+abundance_samples2_allo <-abundance_samples_allo%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_allo$value2 <- abundance_samples2_allo$value * abundance_samples2$weight
+abundance_samples3_allo <- abundance_samples2_allo %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+
+fitted_vals <- fitted(m.haz_allo)        # predicted detection matrix
+obs_vals <- getY(m.haz_allo@data)       # observed detection matrix
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+# Run Shapiro-Wilk test
+shapiro.test(residuals)
+
+
+
+```
+
+```{r A. trichotis plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_allo)
+total_detections <- colSums(detection_matrix)
+
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0, 4,8,12,16,20)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
+
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
+
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.haz_allo, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+allo_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size = 0.8, linetype="dashed") +
+  labs(
+    title = "A. trichotis",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
 
 ```
 
@@ -294,6 +719,81 @@ savoko_micro_h <- savoko_micro+ (predictions_micro$SE[6]*average_group_size*1.96
 fitstats(m.haz_micro)
 (pb <- parboot(m.haz_micro, fitstats, nsim=25, report=1))
 
+
+#posterior samples
+abundance_samples_micro <- posteriorSamples(m.half_micro, nsims = 100)
+
+abundance_samples_micro <-as.data.frame(abundance_samples_micro@samples)
+
+abundance_samples_micro$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+
+abundance_samples_micro$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
+
+abundance_samples2_micro <-abundance_samples_micro%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_micro$value2 <- abundance_samples2_micro$value * abundance_samples2$weight
+abundance_samples3_micro <- abundance_samples2_micro %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+fitted_vals <- fitted(m.haz_micro)        # predicted detection matrix
+obs_vals <- getY(m.haz_micro@data)       # observed detection matrix
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+# Run Shapiro-Wilk test
+shapiro.test(residuals)
+
+
+```
+
+```{r M. lehilahytsara plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_micro)
+total_detections <- colSums(detection_matrix)
+
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0,5,10,15,20,25,30)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
+
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
+
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.haz_micro, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+micro_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size = 0.8, linetype="dashed") +
+  labs(
+    title = "M. lehilahytsara",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
+
 ```
 
 ```{r Avahi density calculations}
@@ -301,7 +801,6 @@ fitstats(m.haz_micro)
 dists.sub <- subset(survey_all, Nom_sientifique=='Avahi_laniger')
 dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
 dists.order <- dists.sub[order(dists.sub$distance), ]  
-#dists.trunc <-dists.order[dists.order$distance < 25,]
 yDat <- formatDistData(dists.order, distCol="distance", transectNameCol="Transect", dist.breaks=c(0, 6, 12, 18, 24, 28)) 
 
 
@@ -333,6 +832,82 @@ savoko_avahi_h <- savoko_avahi + (predictions_avahi$SE[6]*average_group_size*1.9
 fitstats(m.haz_avahi)
 (pb <- parboot(m.haz_avahi, fitstats, nsim=25, report=1))
 
+
+#posterior samples
+abundance_samples_avahi <- posteriorSamples(m.half_avahi, nsims = 100)
+
+abundance_samples_avahi <-as.data.frame(abundance_samples_avahi@samples)
+
+abundance_samples_avahi$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+
+abundance_samples_avahi$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
+
+abundance_samples2_avahi <-abundance_samples_avahi%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_avahi$value2 <- abundance_samples2_avahi$value * abundance_samples2$weight
+abundance_samples3_avahi <- abundance_samples2_avahi %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+
+fitted_vals <- fitted(m.haz_avahi)        # predicted detection matrix
+obs_vals <- getY(m.haz_avahi@data)       # observed detection matrix
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+# Run Shapiro-Wilk test
+shapiro.test(residuals)
+
+
+```
+
+```{r A. laniger plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_avahi)
+total_detections <- colSums(detection_matrix)
+
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0, 6, 12, 18, 24, 28)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
+
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
+
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.haz_micro, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+avahi_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size = 0.8, linetype="dashed") +
+  labs(
+    title = "A. laniger",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
+
 ```
 
 ```{r Lepilemur density calculations}
@@ -340,7 +915,6 @@ fitstats(m.haz_avahi)
 dists.sub <- subset(survey_all, Nom_sientifique=='Lepilemur_seali')
 dists.sub$distance <- abs(sin(dists.sub$Angle)*(dists.sub$Dis))
 dists.order <- dists.sub[order(dists.sub$distance), ]  
-#dists.trunc <-dists.order[dists.order$distance < 25,]
 yDat <- formatDistData(dists.order, distCol="distance", transectNameCol="Transect", dist.breaks=c(0, 5,10,15,20,25,30)) 
 
 dists.sub$N_ind <- as.numeric(dists.sub$N_ind)
@@ -371,6 +945,81 @@ primary_lepi_sd <- predictions_lepi$Predicted[1]*average_group_size
 
 fitstats(m.half_lepi)
 (pb <- parboot(m.half_lepi, fitstats, nsim=100, report=1))
+
+
+#posterior samples
+abundance_samples_lepi <- posteriorSamples(m.half_lepi, nsims = 100)
+
+abundance_samples_lepi <-as.data.frame(abundance_samples_lepi@samples)
+
+abundance_samples_lepi$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
+
+abundance_samples_lepi$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
+
+abundance_samples2_lepi <-abundance_samples_lepi%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_lepi$value2 <- abundance_samples2_lepi$value * abundance_samples2$weight
+abundance_samples3_lepi <- abundance_samples2_lepi %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+fitted_vals <- fitted(m.half_lepi)  # predicted detection counts
+obs_vals <- getY(m.half_lepi@data)  # observed detection counts
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+shapiro.test(residuals)
+
+
+
+```
+
+```{r L. seali plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_lepi)
+total_detections <- colSums(detection_matrix)
+
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0, 5,10,15,20,25,30)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
+
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
+
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.haz_lepi, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+lepi_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size = 0.8, linetype="dashed") +
+  labs(
+    title = "L. seali",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
 
 ```
 
@@ -413,86 +1062,158 @@ primary_cheiro_sd <- predictions_cheiro$Predicted[1]*average_group_size
 fitstats(m.half_cheiro)
 (pb <- parboot(m.half_cheiro, fitstats, nsim=100, report=1))
 
-```
 
-```{r Summary}
 
-primary <- c(primary_rub, primary_albi, primary_hapa, primary_prop, primary_allo, primary_micro, primary_lepi, primary_avahi, primary_cheiro)
-primary_l <- c(primary_rub_l, primary_albi_l, primary_hapa_l, primary_prop_l, primary_allo_l, primary_micro_l, primary_lepi_l, primary_avahi_l, primary_cheiro_l)
-primary_h <- c(primary_rub_h, primary_albi_h, primary_hapa_h, primary_prop_h, primary_allo_h, primary_micro_h, primary_lepi_h, primary_avahi_h, primary_cheiro_h)
-savoko <- c(savoko_rub, savoko_albi, savoko_hapa, savoko_prop, savoko_allo, savoko_micro, savoko_lepi, savoko_avahi, savoko_cheiro)
-savoko_l <- c(savoko_rub_l, savoko_albi_l, savoko_hapa_l, savoko_prop_l, savoko_allo_l, savoko_micro_l, savoko_lepi_l, savoko_avahi_l, savoko_cheiro_l)
-savoko_h <- c(savoko_rub_h, savoko_albi_h, savoko_hapa_h, savoko_prop_h, savoko_allo_h, savoko_micro_h, savoko_lepi_h, savoko_avahi_h, savoko_cheiro_h)
-lemur <- c("Eulemur_rubriventer", "Eulemur_albifrons", "Hapalemur_occidentalis", "Propithecus_candidus",
-            "Allocebus_trichotis", "Microcebus_lehilahytsara", "Lepilemur_seali","Avahi_laniger", "Cheirogaleus_crossleyi")
-length(lemur)
-length(primary)
-length(savoko)
+#posterior samples
+abundance_samples_cheiro <- posteriorSamples(m.half_cheiro, nsims = 100)
 
-lemur_density <- data.frame(lemur, primary,primary_l, primary_h, savoko, savoko_l, savoko_h)
-lemur_density[10,]<- c("Daubentonia_madagascariensis",0, 0,0,0,0,0)#No aye-ayes observed ever in the study
+abundance_samples_cheiro <-as.data.frame(abundance_samples_cheiro@samples)
 
-lemur_density2 <- lemur_density %>% pivot_longer(cols=primary:savoko_h, names_to = "Habitat", values_to= "Density") %>% separate(Habitat, into = c("Habitat", "Value"), sep = "_")
-lemur_density2$Value[is.na(lemur_density2$Value)] <- "Estimate"
-lemur_density2$Value[lemur_density2$Value=="l"] <- "Lower"
-lemur_density2$Value[lemur_density2$Value=="h"] <- "Upper"
-lemur_density2$Habitat[lemur_density2$Habitat=="primary"] <- "Primary"
-lemur_density2$Habitat[lemur_density2$Habitat=="savoko"] <- "Secondary"
-lemur_density2 <- lemur_density2 %>% pivot_wider(names_from=Value, values_from=Density)
-lemur_density2$Estimate <- as.numeric(lemur_density2$Estimate)
-lemur_density2$Lower <- as.numeric(lemur_density2$Lower)
-lemur_density2$Upper <- as.numeric(lemur_density2$Upper)
-lemur_density2$lemur[lemur_density2$lemur=="Allocebus_trichotis"] <- "A. trichotis"
-lemur_density2$lemur[lemur_density2$lemur=="Avahi_laniger"] <- "A. laniger"
-lemur_density2$lemur[lemur_density2$lemur=="Eulemur_albifrons"] <- "E. albifrons"
-lemur_density2$lemur[lemur_density2$lemur=="Eulemur_rubriventer"] <- "E. rubriventer"
-lemur_density2$lemur[lemur_density2$lemur=="Hapalemur_occidentalis"] <- "H. occidentalis"
-lemur_density2$lemur[lemur_density2$lemur=="Lepilemur_seali"] <- "L. seali"
-lemur_density2$lemur[lemur_density2$lemur=="Microcebus_lehilahytsara"] <-"M. lehilahytsara"
-lemur_density2$lemur[lemur_density2$lemur=="Propithecus_candidus"] <-"P. candidus"
-lemur_density2$lemur[lemur_density2$lemur=="Cheirogaleus_crossleyi"] <-"C. crossleyi" 
-lemur_density2$lemur[lemur_density2$lemur=="Daubentonia_madagascariensis"] <-"D. madagascariensis" 
-lemur_density2$shape <- lemur_density2$Estimate
-lemur_density2$shape[lemur_density2$shape==0]<- "NoData"
-lemur_density2$shape[lemur_density2$shape!="NoData"]<- "xData"
+abundance_samples_cheiro$Habitat <- c("Primary", "Primary", "Primary", "Primary", "Savoko", "Savoko")
 
-lemur_diversity_plot2 <-ggplot(data=lemur_density2, aes(x= lemur, y=Estimate, color=Habitat, alpha=shape))+
-  scale_color_manual(values = c("darkseagreen3", "lightgoldenrod2"))+
-   geom_pointrange(aes(ymin=Lower, ymax=Upper), size=0.4,
-                 position=position_dodge(.5))+
-  theme_classic()+
-  ylab("Density (ind./ha)")+
-  xlab("Lemur Species")+
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 7))+
-  guides(fill=guide_legend(title="Land Use"), alpha=FALSE)+
-  scale_alpha_manual(values= c(0.2,1), name="Land Use")+
-  labs(color = "Land Use")
+abundance_samples_cheiro$weight <- c( c(860, 1000, 1000, 1000)/ sum(c(860, 1000, 1000, 1000)), c(650, 1350)/ sum(c(650,1350)))
 
-lemur_diversity_plot <- ggplot(data=lemur_density2, aes(x= lemur, y=Estimate, fill=Habitat, alpha=shape))+
-  scale_fill_manual(values = c("darkseagreen3", "lightgoldenrod2"))+
-   scale_color_manual(values = c("seagreen4", "darkgoldenrod3"))+
-  geom_col(position = "dodge")+
-   geom_errorbar(aes(ymin=Lower, ymax=Upper,color=Habitat), size=0.7, width=.5,
-                 position=position_dodge(0.9))+
-  theme_classic()+
-  ylab("Density (ind./ha)")+
-  xlab("Lemur Species")+
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))+
-  guides(fill=guide_legend(title=NULL), alpha=FALSE)+
-  scale_alpha_manual(values= c(0.2,1))+ theme(legend.position="right")
+abundance_samples2_cheiro <-abundance_samples_cheiro%>% pivot_longer(cols = `V1`:`V100`)
+abundance_samples2_cheiro$value2 <- abundance_samples2_cheiro$value * abundance_samples2$weight
+abundance_samples3_cheiro <- abundance_samples2_cheiro %>% dplyr::select(Habitat, value2, name) %>% group_by(Habitat, name) %>% summarise(density = sum(value2))
+
+
+
+fitted_vals <- fitted(m.half_cheiro)        # predicted detection matrix
+obs_vals <- getY(m.half_cheiro@data)       # observed detection matrix
+
+# Optional: sum across distance bins
+fitted_totals <- rowSums(fitted_vals)
+obs_totals <- rowSums(obs_vals)
+
+residuals <- obs_totals - fitted_totals
+
+# Run Shapiro-Wilk test
+shapiro.test(residuals)
 
 ```
 
-```{r Save densities}
+```{r C. crossleyi plot}
+# Detection matrix from unmarkedFrame
+detection_matrix <- getY(umf_cheiro)
+total_detections <- colSums(detection_matrix)
 
-lemur_density3 <- lemur_density2 %>% mutate(Estimate = round(Estimate, 0),Lower = round(Lower, 0), Upper = round(Upper, 0))%>% dplyr::select(-shape)%>% dplyr::select(Habitat, lemur, Estimate, Lower, Upper) %>% rename(Lemur = lemur) %>% arrange(Habitat)
+# Define distance breaks (make sure these match those used in umf_rub)
+dist_breaks <- c(0, 5, 10, 15, 20, 25,30)
+bin_mids <- (dist_breaks[-1] + dist_breaks[-length(dist_breaks)]) / 2
+bin_widths <- diff(dist_breaks)
 
-lemur_density4 <- lemur_density2 %>% mutate(Estimate = round(Estimate, 3),Lower = round(Lower, 3), Upper = round(Upper, 3))%>% dplyr::select(-shape)%>% dplyr::select(Habitat, lemur, Estimate, Lower, Upper) %>% rename(Lemur = lemur) %>% arrange(Habitat)
+# Create numeric histogram dataframe using bin midpoints and widths
+hist_df <- tibble(
+  BinMid = bin_mids,
+  Width = bin_widths,
+  Detections = total_detections
+)
 
-write.csv(lemur_density3, file=paste0(data_path, "lemur_densities_round.csv"))
-write.csv(lemur_density4, file=paste0(data_path, "lemur_densities_round2.csv"))
-write.csv(lemur_density2, file=paste0(data_path, "lemur_densities.csv"))
-write.csv(lemur_density, file=paste0(data_path, "lemur_density.csv"))
+# Estimate sigma for the detection function
+sigma_hat <- backTransform(m.half_cheiro, type = "det")@estimate
+
+# Generate detection function across a continuous distance range
+x_vals <- seq(0, max(dist_breaks), length.out = 200)
+detection_pdf <- dxhn(x_vals, sigma = sigma_hat)
+
+# Scale detection function to match histogram scale
+detection_scaled <- detection_pdf / max(detection_pdf) * max(hist_df$Detections)
+
+det_curve <- tibble(
+  Distance = x_vals,
+  ScaledPDF = detection_scaled
+)
+
+# Plot histogram with numeric x-axis and overlay detection function
+cheiro_plot <- ggplot() +
+  geom_col(data = hist_df, aes(x = BinMid, y = Detections, width = Width),
+           fill = "violet", color = "white") +
+  geom_line(data = det_curve, aes(x = Distance, y = ScaledPDF), 
+            color = "black", size = 0.8, linetype="dashed") +
+  labs(
+    title = "C. crossleyi",
+    x = "Distance from Transect (m)",
+    y = "Number of Detections"
+  ) +
+  theme_classic()
+
+```
+
+```{r}
+
+abundance_samples3_avahi$Species <- "A. laniger"
+abundance_samples3_allo$Species <- "A. trichotis"
+abundance_samples3_cheiro$Species <- "C. crossleyi"
+abundance_samples3_hapa$Species <- "H. occidentalis"
+abundance_samples3_rub$Species <- "E. rubriventer"
+abundance_samples3_albi$Species <- "E. albifrons"
+abundance_samples3_micro$Species <- "M. lehilahytsara"
+abundance_samples3_lepi$Species <- "L. seali"
+abundance_samples3_prop$Species <- "P. candidus"
+
+density_total <- rbind(abundance_samples3_avahi, abundance_samples3_allo, abundance_samples3_cheiro, abundance_samples3_hapa, abundance_samples3_rub, abundance_samples3_albi, abundance_samples3_micro, abundance_samples3_lepi, abundance_samples3_prop)
+
+density_total2 <- density_total %>% rename(lemur= Species, Simulation_ID = name, Estimate = density)
+
+
+density_total2$Simulation_ID <- as.integer(gsub("V", "", density_total2$Simulation_ID))
+
+lem_density <- write.csv(density_total2 , file=paste0( data_path, "lemur_density_draws.csv"))
+
+```
+
+```{r}
+
+
+ggarrange(allo_plot, cheiro_plot, micro_plot, hapa_plot, rubri_plot, albi_plot, prop_plot, avahi_plot, lepi_plot)
+
+
+```
+
+```{r}
+
+survey_all_density <- survey_all %>%
+  drop_na(Nom_sientifique) %>%
+  filter(!(Nom_sientifique == "Eulemur_rubriventer" & Dis > 25))%>%
+   filter(!(Nom_sientifique == "Propithecus_candidus" & Dis > 20))%>%
+   filter(!(Nom_sientifique == "Hapalemur_occidentalis" & Dis > 20))%>%
+   filter(!(Nom_sientifique == "Microcebus_lehilahytsara" & Dis > 28))%>%
+   filter(!(Nom_sientifique == "Cheirogaleus_crossleyi" & Dis > 30))%>%
+   filter(!(Nom_sientifique == "Lepilemur_seali" & Dis > 25))%>%
+   filter(!(Nom_sientifique == "Propithecus_candidus" & Type=="Nocturnal"))
+
+survey_all_density$Habitat[survey_all_density$Habitat=="Savoko"] <- "Secondary"
+
+ggplot(data = survey_all_density , aes(x = Dis, fill = Habitat)) +
+  geom_histogram(binwidth = 10, color = "white", position = "dodge") +
+  ylab("Number of Observations") +
+  xlab("Distance from Transect (m)") +
+  theme_classic() +
+  scale_fill_manual(values = c("forestgreen", "goldenrod"))+
+  facet_wrap(~Nom_sientifique)
+
+ggplot(data = survey_all_density, aes(x = Dis, fill = Habitat, color = Habitat)) +
+  geom_density(alpha = 0.5) +
+  ylab("Number of Observations") +
+  xlab("Distance from Transect (m)") +
+  theme_classic() +
+  scale_fill_manual(values = c("forestgreen", "goldenrod")) +
+  scale_color_manual(values = c("forestgreen", "goldenrod")) +
+  xlim(0, 40) +
+  geom_vline(xintercept = median(survey_all_density$Dis[survey_all_density$Habitat == "Secondary"]),
+             color = "goldenrod3", size = 1, linetype= "dashed") +
+  geom_vline(xintercept = median(survey_all_density$Dis[survey_all_density$Habitat == "Primary"]),
+             color = "forestgreen", size = 1, linetype = "dashed")
+
+
+mean(survey_all_density$Dis[survey_all_density$Habitat=="Secondary"])
+median(survey_all_density$Dis[survey_all_density$Habitat=="Secondary"])
+sd(survey_all_density$Dis[survey_all_density$Habitat=="Secondary"])
+
+mean(survey_all_density$Dis[survey_all_density$Habitat=="Primary"])
+median(survey_all_density$Dis[survey_all_density$Habitat=="Primary"])
+sd(survey_all_density$Dis[survey_all_density$Habitat=="Primary"])
 
 ```
 

@@ -1,0 +1,1116 @@
+---
+title: "Network Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Set up organization}
+#Set up directory
+wd_path <- "~/Documents/GitHub/comatsa_network copy 6"
+data_path <- "Data/"
+save_path <- "Outputs/"
+
+#Load packages
+#devtools::install_github('Ecological-Complexity-Lab/emln', force=T)
+#devtools::install_github('Ecological-Complexity-Lab/infomap_ecology_package', force=T)
+#install_infomap(target_folder = NULL, source = "binary")
+#devtools::install_github("manlius/muxViz")
+source("~/Documents/GitHub/comatsa_network copy 4/Extrafunctions2.R")
+library(infomapecology); library(dplyr); library(vegan);library(igraph);library(muxViz);library(ggridges);library(ggpubr);library(ggpattern);library(scales);library(network);library(GGally);library(ggnet);library(V.PhyloMaker);library(caper);library(MuMIn);library(ggpattern);library(ggpubr);library(bipartite);library(gridGraphics)
+
+#Load data
+lem_primary <- read.csv("~/Documents/GitHub/comatsa_network copy 5/Data/lem_primary3.csv")
+lem_secondary <- read.csv("~/Documents/GitHub/comatsa_network copy 5/Data/lem_secondary3.csv")
+lem_primary_pred <- read.csv("~/Documents/GitHub/comatsa_network copy 5/Data/lem_primary_pred3.csv")
+lem_secondary_pred <- read.csv("~/Documents/GitHub/comatsa_network copy 5/Data/lem_secondary_pred3.csv")
+lem_primary_fol <- read.csv("~/Documents/GitHub/comatsa_network copy 5/Data/lem_primary_fol3.csv")
+lem_secondary_fol <- read.csv("~/Documents/GitHub/comatsa_network copy 5/Data/lem_secondary_fol3.csv")
+fruit_lengths <- read.csv( file=paste0( data_path, "fruit_lengths.csv"))
+lemur_densities_sim<- read.csv("~/Documents/GitHub/LemurNetworkStructureStability/Data/lemur_density_draws.csv")
+#lemur_densities <- read.csv("~/Documents/GitHub/comatsa_network copy 3/DataKeep/lemur_densities.csv")
+#lemur_densities_sim$density <- round(lemur_densities_sim$density, 0)
+plant_uses <- read.csv( file=paste0( data_path, "plant_uses2.csv"))
+tree_size <- read.csv( file=paste0( data_path, "tree_size.csv"))
+wood_density <- read.csv( file=paste0( data_path, "wood_density.csv"))
+plant_names <- read.csv(file=paste0("~/Documents/GitHub/comatsa_network/Data/plant_names.csv"))
+fruit_lengths$FruitLength <- scale(exp(fruit_lengths$FruitLength))
+tree_size$DBH2 <- tree_size$DBH/10
+tree_size$DBH <- scale(tree_size$DBH)
+tree_size$Genus[tree_size$Genus=="Mantalania "] <- "Mantalania"
+wood_density$meanWD <- scale(wood_density$meanWD)
+seed_mass <- read.csv( "~/Documents/GitHub/comatsa_network copy 4/seed_mass2.csv") %>% dplyr::select(Genus,mass)
+seed_mass$mass <- scale(seed_mass$mass)
+body_size <- as.data.frame(read.csv("~/Documents/GitHub/comatsa_network/Data/LemurBodySize.csv"))
+body_size$AdultBodyMass <- body_size$AdultBodyMass/1000
+tree_size$X<- tree_size$Genus
+
+```
+
+```{r Set up organization}
+lem_primary$Akomba <- lem_primary$Akomba * body_size$AdultBodyMass[body_size$Species=="Akomba"]
+lem_primary$Bokombolo <- lem_primary$Bokombolo * body_size$AdultBodyMass[body_size$Species=="Bokombolo"]
+lem_primary$Fitsidika <- lem_primary$Fitsidika * body_size$AdultBodyMass[body_size$Species=="Fitsidika"]
+lem_primary$Fotsife <- lem_primary$Fotsife * body_size$AdultBodyMass[body_size$Species=="Fotsife"]
+lem_primary$Kandrandra <- lem_primary$Kandrandra * body_size$AdultBodyMass[body_size$Species=="Kandrandra"]
+lem_primary$Tongono <- lem_primary$Tongono * body_size$AdultBodyMass[body_size$Species=="Tongono"]
+lem_primary$Tsidy <- lem_primary$Tsidy * body_size$AdultBodyMass[body_size$Species=="Tsidy"]
+lem_primary$Tsitsihy <- lem_primary$Tsitsihy * body_size$AdultBodyMass[body_size$Species=="Tsitsihy"]
+rownames(lem_primary) <- lem_primary$X
+lem_primary <- lem_primary[,-1]
+
+lem_secondary$Akomba <- lem_secondary$Akomba * body_size$AdultBodyMass[body_size$Species=="Akomba"]
+lem_secondary$Bokombolo <- lem_secondary$Bokombolo * body_size$AdultBodyMass[body_size$Species=="Bokombolo"]
+lem_secondary$Fitsidika <- lem_secondary$Fitsidika * body_size$AdultBodyMass[body_size$Species=="Fitsidika"]
+lem_secondary$Fotsife <- lem_secondary$Fotsife * body_size$AdultBodyMass[body_size$Species=="Fotsife"]
+lem_secondary$Kandrandra <- lem_secondary$Kandrandra * body_size$AdultBodyMass[body_size$Species=="Kandrandra"]
+lem_secondary$Tsidy <- lem_secondary$Tsidy * body_size$AdultBodyMass[body_size$Species=="Tsidy"]
+lem_secondary$Tsitsihy <- lem_secondary$Tsitsihy * body_size$AdultBodyMass[body_size$Species=="Tsitsihy"]
+rownames(lem_secondary) <- lem_secondary$X
+lem_secondary <- lem_secondary[,-1]
+
+lem_primary_pred$Akomba <- lem_primary_pred$Akomba * body_size$AdultBodyMass[body_size$Species=="Akomba"]
+lem_primary_pred$Bokombolo <- lem_primary_pred$Bokombolo * body_size$AdultBodyMass[body_size$Species=="Bokombolo"]
+lem_primary_pred$Fitsidika <- lem_primary_pred$Fitsidika * body_size$AdultBodyMass[body_size$Species=="Fitsidika"]
+lem_primary_pred$Fotsife <- lem_primary_pred$Fotsife * body_size$AdultBodyMass[body_size$Species=="Fotsife"]
+lem_primary_pred$Kandrandra <- lem_primary_pred$Kandrandra * body_size$AdultBodyMass[body_size$Species=="Kandrandra"]
+lem_primary_pred$Tongono <- lem_primary_pred$Tongono * body_size$AdultBodyMass[body_size$Species=="Tongono"]
+lem_primary_pred$Tsidy <- lem_primary_pred$Tsidy * body_size$AdultBodyMass[body_size$Species=="Tsidy"]
+lem_primary_pred$Tsitsihy <- lem_primary_pred$Tsitsihy * body_size$AdultBodyMass[body_size$Species=="Tsitsihy"]
+lem_primary_pred$Simpona <- lem_primary_pred$Simpona * body_size$AdultBodyMass[body_size$Species=="Simpona"]
+rownames(lem_primary_pred) <- lem_primary_pred$X
+lem_primary_pred <- lem_primary_pred[,-1]
+
+lem_secondary_pred$Akomba <- lem_secondary_pred$Akomba * body_size$AdultBodyMass[body_size$Species=="Akomba"]
+lem_secondary_pred$Bokombolo <- lem_secondary_pred$Bokombolo * body_size$AdultBodyMass[body_size$Species=="Bokombolo"]
+lem_secondary_pred$Fitsidika <- lem_secondary_pred$Fitsidika * body_size$AdultBodyMass[body_size$Species=="Fitsidika"]
+lem_secondary_pred$Fotsife <- lem_secondary_pred$Fotsife * body_size$AdultBodyMass[body_size$Species=="Fotsife"]
+lem_secondary_pred$Kandrandra <- lem_secondary_pred$Kandrandra * body_size$AdultBodyMass[body_size$Species=="Kandrandra"]
+lem_secondary_pred$Tsidy <- lem_secondary_pred$Tsidy * body_size$AdultBodyMass[body_size$Species=="Tsidy"]
+lem_secondary_pred$Tsitsihy <- lem_secondary_pred$Tsitsihy * body_size$AdultBodyMass[body_size$Species=="Tsitsihy"]
+rownames(lem_secondary_pred) <- lem_secondary_pred$X
+lem_secondary_pred <- lem_secondary_pred[,-1]
+
+
+lem_primary_fol$Akomba <- lem_primary_fol$Akomba * body_size$AdultBodyMass[body_size$Species=="Akomba"]
+lem_primary_fol$Bokombolo <- lem_primary_fol$Bokombolo * body_size$AdultBodyMass[body_size$Species=="Bokombolo"]
+lem_primary_fol$Fitsidika <- lem_primary_fol$Fitsidika * body_size$AdultBodyMass[body_size$Species=="Fitsidika"]
+lem_primary_fol$Fotsife <- lem_primary_fol$Fotsife * body_size$AdultBodyMass[body_size$Species=="Fotsife"]
+lem_primary_fol$Kandrandra <- lem_primary_fol$Kandrandra * body_size$AdultBodyMass[body_size$Species=="Kandrandra"]
+lem_primary_fol$Tongono <- lem_primary_fol$Tongono * body_size$AdultBodyMass[body_size$Species=="Tongono"]
+lem_primary_fol$Tsidy <- lem_primary_fol$Tsidy * body_size$AdultBodyMass[body_size$Species=="Tsidy"]
+lem_primary_fol$Tsitsihy <- lem_primary_fol$Tsitsihy * body_size$AdultBodyMass[body_size$Species=="Tsitsihy"]
+lem_primary_fol$Simpona <- lem_primary_fol$Simpona * body_size$AdultBodyMass[body_size$Species=="Simpona"]
+rownames(lem_primary_fol) <- lem_primary_fol$X
+lem_primary_fol <- lem_primary_fol[,-1]
+
+lem_secondary_fol$Akomba <- lem_secondary_fol$Akomba * body_size$AdultBodyMass[body_size$Species=="Akomba"]
+lem_secondary_fol$Bokombolo <- lem_secondary_fol$Bokombolo * body_size$AdultBodyMass[body_size$Species=="Bokombolo"]
+lem_secondary_fol$Fitsidika <- lem_secondary_fol$Fitsidika * body_size$AdultBodyMass[body_size$Species=="Fitsidika"]
+lem_secondary_fol$Fotsife <- lem_secondary_fol$Fotsife * body_size$AdultBodyMass[body_size$Species=="Fotsife"]
+lem_secondary_fol$Kandrandra <- lem_secondary_fol$Kandrandra * body_size$AdultBodyMass[body_size$Species=="Kandrandra"]
+lem_secondary_fol$Tsidy <- lem_secondary_fol$Tsidy * body_size$AdultBodyMass[body_size$Species=="Tsidy"]
+lem_secondary_fol$Tsitsihy <- lem_secondary_fol$Tsitsihy * body_size$AdultBodyMass[body_size$Species=="Tsitsihy"]
+rownames(lem_secondary_fol) <- lem_secondary_fol$X
+lem_secondary_fol <- lem_secondary_fol[,-1]
+
+```
+
+```{r Data cleaning and simulation}
+
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="E. rubriventer"] <- "Tongono"
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="E. albifrons"] <- "Akomba"
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="H. occidentalis"] <- "Bokombolo"
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="P. candidus"] <- "Simpona"
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="A. trichotis"] <- "Kandrandra"
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="M. lehilahytsara"] <- "Tsidy"
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="L. seali" ] <- "Fitsidika"
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="C. crossleyi"] <- "Tsitsihy"
+lemur_densities_sim$lemur[lemur_densities_sim$lemur=="A. laniger"] <- "Fotsife"
+
+lemur_densities_sim$estimate <- lemur_densities_sim$Estimate
+
+lemur_densities_sim$Habitat[lemur_densities_sim$Habitat=="Savoko"] <- "Secondary"
+
+# Ensure species names match matrix column names
+species_names <- unique(colnames(lem_primary))
+
+# Initialize a list to store 100 different matrices
+simulated_matrices <- vector("list", 100)
+
+# Initialize list
+simulated_matrices <- vector("list", 100)
+
+# Loop over 100 simulations
+for (sim_id in 1:100) {
+  
+  # Get values for this simulation
+  sim_values <- lemur_densities_sim %>% filter(Simulation_ID == sim_id)
+
+  # Prepare each matrix for this simulation
+  lem_primary_sim <- lem_primary
+  lem_secondary_sim <- lem_secondary
+  lem_primary_pred_sim <- lem_primary_pred
+  lem_secondary_pred_sim <- lem_secondary_pred
+  lem_primary_fol_sim <- lem_primary_fol
+  lem_secondary_fol_sim <- lem_secondary_fol
+
+  species_names <- unique(sim_values$lemur)
+
+  # --------- 1. Primary - Baseline ----------
+  for (species in species_names) {
+    sim_value <- sim_values %>%
+      filter(lemur == species, Habitat == "Primary") %>%
+      pull(estimate)
+
+    if (length(sim_value) == 1 && species %in% colnames(lem_primary_sim)) {
+      lem_primary_sim[[species]] <- lem_primary_sim[[species]] * sim_value
+    }
+  }
+
+  # --------- 2. Secondary - Baseline ----------
+  for (species in species_names) {
+    sim_value <- sim_values %>%
+      filter(lemur == species, Habitat == "Secondary") %>%
+      pull(estimate)
+
+    if (length(sim_value) == 1 && species %in% colnames(lem_secondary_sim)) {
+      lem_secondary_sim[[species]] <- lem_secondary_sim[[species]] * sim_value
+    }
+  }
+
+  # --------- 3. Primary - Predation ----------
+  for (species in species_names) {
+    sim_value <- sim_values %>%
+      filter(lemur == species, Habitat == "Primary") %>%
+      pull(estimate)
+
+    if (length(sim_value) == 1 && species %in% colnames(lem_primary_pred_sim)) {
+      lem_primary_pred_sim[[species]] <- lem_primary_pred_sim[[species]] * sim_value
+    }
+  }
+
+  # --------- 4. Secondary - Predation ----------
+  for (species in species_names) {
+    sim_value <- sim_values %>%
+      filter(lemur == species, Habitat == "Secondary") %>%
+      pull(estimate)
+
+    if (length(sim_value) == 1 && species %in% colnames(lem_secondary_pred_sim)) {
+      lem_secondary_pred_sim[[species]] <- lem_secondary_pred_sim[[species]] * sim_value
+    }
+  }
+
+  # --------- 5. Primary - Folivory ----------
+  for (species in species_names) {
+    sim_value <- sim_values %>%
+      filter(lemur == species, Habitat == "Primary") %>%
+      pull(estimate)
+
+    if (length(sim_value) == 1 && species %in% colnames(lem_primary_fol_sim)) {
+      lem_primary_fol_sim[[species]] <- lem_primary_fol_sim[[species]] * sim_value
+    }
+  }
+
+  # --------- 6. Secondary - Folivory ----------
+  for (species in species_names) {
+    sim_value <- sim_values %>%
+      filter(lemur == species, Habitat == "Secondary") %>%
+      pull(estimate)
+
+    if (length(sim_value) == 1 && species %in% colnames(lem_secondary_fol_sim)) {
+      lem_secondary_fol_sim[[species]] <- lem_secondary_fol_sim[[species]] * sim_value
+    }
+  }
+
+  # Round and ensure non-negative
+  lem_primary_sim <- lem_primary_sim %>% mutate(across(everything(), ~ round(pmax(.x, 0), 0)))
+  lem_secondary_sim <- lem_secondary_sim %>% mutate(across(everything(), ~ round(pmax(.x, 0), 0)))
+  lem_primary_pred_sim <- lem_primary_pred_sim %>% mutate(across(everything(), ~ round(pmax(.x, 0), 0)))
+  lem_secondary_pred_sim <- lem_secondary_pred_sim %>% mutate(across(everything(), ~ round(pmax(.x, 0), 0)))
+  lem_primary_fol_sim <- lem_primary_fol_sim %>% mutate(across(everything(), ~ round(pmax(.x, 0), 0)))
+  lem_secondary_fol_sim <- lem_secondary_fol_sim %>% mutate(across(everything(), ~ round(pmax(.x, 0), 0)))
+
+  # Save to list
+  simulated_matrices[[sim_id]] <- list(
+    lem_primary = lem_primary_sim,
+    lem_secondary = lem_secondary_sim,
+    lem_primary_pred = lem_primary_pred_sim,
+    lem_secondary_pred = lem_secondary_pred_sim,
+    lem_primary_fol = lem_primary_fol_sim,
+    lem_secondary_fol = lem_secondary_fol_sim
+  )
+}
+
+
+
+```
+
+```{r Plot single-layer networks}
+lem_primary_edgelist <- lem_primary%>% mutate(Plants =rownames(lem_primary)) %>%  pivot_longer(cols=Akomba:Tsitsihy)%>% rename(Lemur=name)
+lem_primary_edgelist$value <- rescale(lem_primary_edgelist$value)*2
+lem_primary <- lem_primary[rowSums(lem_primary) != 0, ]
+net_prim <- network(as.matrix(lem_primary), directed = FALSE, bipartite = TRUE)
+disp_primary_weights <-  lem_primary_edgelist$value[lem_primary_edgelist$value!=0]
+disp_primary_weights[disp_primary_weights >0 & disp_primary_weights <0.1] <- 0.1
+
+network::set.edge.attribute(net_prim, attrname = "weight",disp_primary_weights)
+network::set.vertex.attribute(net_prim, attrname = "Guild", c(rep("Plant", 56),"E. albifrons", "E. rubriventer","H. occidentalis", "A. laniger", "L. seali", "A. trichotis", "M. lehilahytsara", "C. crossleyi"))
+
+
+primary_net_plot <- ggnet2(
+  net_prim,
+  edge.size = "weight",
+  node.size = 3,
+  node.color = "Guild",
+  palette = c(
+    "E. albifrons" = "turquoise",
+    "H. occidentalis" = "darkorchid1",
+    "L. seali" = "darkblue",
+    "A. laniger" = "slateblue2",
+    "A. trichotis" = "#56B4E9",
+    "E. rubriventer" = "thistle2",
+    "M. lehilahytsara" = "blue",
+    "C. crossleyi" = "slategrey",
+    "Plant" = "darkseagreen4"
+  )
+) +
+  geom_point(aes(color = color), size = 3, color = "black") +
+  geom_point(aes(color = color), size = 2.5) +
+  scale_color_manual(
+    name = "Node", 
+    values = c(
+      "E. albifrons" = "turquoise",
+      "H. occidentalis" = "darkorchid1",
+      "L. seali" = "darkblue",
+      "A. laniger" = "slateblue2",
+      "A. trichotis" = "#56B4E9",
+      "E. rubriventer" = "thistle2",
+      "M. lehilahytsara" = "blue",
+      "C. crossleyi" = "slategrey",
+      "Plant" = "darkseagreen4"
+    )
+  ) +
+  guides(color = guide_legend(title = "Node"))  
+
+
+lem_secondary_edgelist <- lem_secondary%>% mutate(Plants =rownames(lem_secondary)) %>% pivot_longer(cols=Akomba:Tsitsihy)%>% rename(Lemur=name)
+lem_secondary_edgelist$value <- rescale(lem_secondary_edgelist$value)*2
+lem_secondary_matrix <- as.matrix(lem_secondary)
+lem_secondary <- lem_secondary[rowSums(lem_secondary) != 0, ]
+net_secondary <- network(lem_secondary_matrix, directed = FALSE, bipartite = TRUE)
+disp_secondary_weights <-  lem_secondary_edgelist$value[lem_secondary_edgelist$value!=0]
+disp_secondary_weights[disp_secondary_weights >0 & disp_secondary_weights <0.1] <- 0.1
+network::set.edge.attribute(net_secondary, attrname = "weight",disp_secondary_weights )
+
+network::set.vertex.attribute(net_secondary, attrname = "Guild", c(rep("Plant", 34),"E. albifrons", "H. occidentalis", "A. laniger", "L. seali", "A. trichotis", "M. lehilahytsara", "C. crossleyi"))
+
+
+secondary_net_plot <- ggnet2(net_secondary, edge.size = "weight", node.size = 3, node.color = "Guild", palette = c("E. albifrons"= "turquoise", 
+                                          "H. occidentalis"= "darkorchid1", 
+                                          "L. seali"="darkblue", 
+                                          "A. laniger"="slateblue2", 
+                                          "A. trichotis"= "#56B4E9", 
+                                          "M. lehilahytsara"="blue",
+                                          "C. crossleyi"="slategrey",  "Plant" = "darkgoldenrod2"), label = FALSE)+geom_point(aes(color = color), size = 3, color = "black") + geom_point(aes(color = color), size = 2.5,)+guides(color = FALSE)#+theme(panel.border = element_rect(colour = "grey", fill=NA, size=1))
+
+
+lem_primary_edgelist_pred <- lem_primary_pred%>% mutate(Plants =rownames(lem_primary_pred)) %>% pivot_longer(cols=Akomba:Tsitsihy)%>% rename(Lemur=name)
+lem_primary_edgelist_pred$value <- rescale(lem_primary_edgelist_pred$value)*2
+lem_primary_matrix_pred <- as.matrix(lem_primary_pred)
+lem_primary_pred <- lem_primary_pred[rowSums(primary_pred) != 0, ]
+net_primary_pred <- network(lem_primary_matrix_pred, directed = FALSE, bipartite = TRUE)
+pred_primary_weights <-  lem_primary_edgelist_pred$value[lem_primary_edgelist_pred$value!=0]
+pred_primary_weights[pred_primary_weights >0 & pred_primary_weights <0.1] <- 0.1
+
+network::set.edge.attribute(net_primary_pred, attrname = "weight",pred_primary_weights)
+network::set.vertex.attribute(net_primary_pred, attrname = "Guild", c(rep("Plant", 32),"E. albifrons", "E. rubriventer","P. candidus", "H. occidentalis", "A. laniger", "L. seali", "A. trichotis", "M. lehilahytsara", "C. crossleyi"))
+
+primary_net_plot_pred <- ggnet2(net_primary_pred, edge.size = "weight", node.size = 3, node.color = "Guild", palette = c("E. albifrons"= "turquoise", 
+                                          "H. occidentalis"= "darkorchid1", 
+                                          "L. seali"="darkblue", 
+                                          "A. laniger"="slateblue2", 
+                                          "A. trichotis"= "#56B4E9", 
+                                          "E. rubriventer"="thistle2",
+                                          "M. lehilahytsara"="blue",
+                                          "C. crossleyi"="slategrey",
+                                          "P. candidus"= "coral2", "Plant" = "darkseagreen4"))+geom_point(aes(color = color), size = 3, color = "black") + geom_point(aes(color = color), size = 2.5)+guides(color = FALSE)#+theme(panel.border = element_rect(colour = "grey", fill=NA, size=1))
+
+lem_secondary_edgelist_pred <- lem_secondary_pred%>% mutate(Plants =rownames(lem_secondary_pred)) %>% pivot_longer(cols=Akomba:Tsitsihy)%>% rename(Lemur=name)
+lem_secondary_edgelist_pred$value <- rescale(lem_secondary_edgelist_pred$value)*2
+lem_secondary_matrix_pred <- as.matrix(lem_secondary_pred)
+lem_secondary_pred <- lem_secondary_pred[rowSums(lem_secondary_pred) != 0, ]
+net_secondary_pred <- network(as.matrix(lem_secondary_pred), directed = FALSE, bipartite = TRUE)
+
+pred_secondary_weights <-  lem_secondary_edgelist_pred$value[lem_secondary_edgelist_pred$value!=0]
+pred_secondary_weights[pred_secondary_weights >0 &pred_secondary_weights<0.1] <- 0.1
+
+network::set.edge.attribute(net_secondary_pred, attrname = "weight",pred_secondary_weights)
+network::set.vertex.attribute(net_secondary_pred, attrname = "Guild", c(rep("Plant", 24),"E. albifrons", "H. occidentalis", "A. laniger", "L. seali", "A. trichotis", "M. lehilahytsara", "C. crossleyi"))
+
+secondary_net_plot_pred <- ggnet2(net_secondary_pred, edge.size = "weight", node.size = 3, node.color = "Guild", palette = c("E. albifrons"= "turquoise", 
+                                          "H. occidentalis"= "darkorchid1", 
+                                          "L. seali"="darkblue", 
+                                          "A. laniger"="slateblue2", 
+                                          "A. trichotis"= "#56B4E9", 
+                                          "M. lehilahytsara"="blue",
+                                          "C. crossleyi"="slategrey", "Plant" = "darkgoldenrod2"))+geom_point(aes(color = color), size = 3, color = "black") + geom_point(aes(color = color), size = 2.5)+guides(color = FALSE)#+theme(panel.border = element_rect(colour = "grey", fill=NA, size=1))
+
+
+lem_primary_edgelist_fol <- lem_primary_fol%>% mutate(Plants =rownames(lem_primary_fol)) %>% pivot_longer(cols=Akomba:Tsitsihy)%>% rename(Lemur=name)
+lem_primary_edgelist_fol$value <- rescale(lem_primary_edgelist_fol$value)*2
+lem_primary_matrix_fol <- as.matrix(lem_primary_fol)
+lem_primary_fol <- lem_secondary_fol[rowSums(lem_secondary_fol) != 0, ]
+net_primary_fol <- network(as.matrix(lem_primary_fol), directed = FALSE, bipartite = TRUE)
+
+fol_primary_weights <-  lem_primary_edgelist_fol$value[lem_primary_edgelist_fol$value!=0]
+fol_primary_weights[fol_primary_weights >0 &fol_primary_weights<0.1] <- 0.1
+
+network::set.edge.attribute(net_primary_fol, attrname = "weight",fol_primary_weights)
+network::set.vertex.attribute(net_primary_fol, attrname = "Guild", c(rep("Plant", 17),"E. albifrons","E. rubriventer", "P. candidus", "H. occidentalis",  "A. laniger","L. seali", "A. trichotis","P. candidus", "M. lehilahytsara", "C. crossleyi"))
+
+primary_net_plot_fol <- ggnet2(net_primary_fol, edge.size = "weight", node.size = 3, node.color = "Guild", palette = c("E. albifrons"= "turquoise", 
+                                          "H. occidentalis"= "darkorchid1", 
+                                          "L. seali"="darkblue", 
+                                          "A. laniger"="slateblue2", 
+                                          "A. trichotis"= "#56B4E9", 
+                                          "P. candidus" = "coral2",
+                                          "E. rubriventer" = "thistle2",
+                                          "M. lehilahytsara"="blue",
+                                          "C. crossleyi"="slategrey", "Plant" = "darkseagreen4"))+geom_point(aes(color = color), size = 3, color = "black") + geom_point(aes(color = color), size = 2.5)+guides(color = FALSE)#+theme(panel.border = element_rect(colour = "grey", fill=NA, size=1))
+
+lem_secondary_edgelist_fol <- lem_secondary_fol %>% mutate(Plants =rownames(lem_secondary_fol)) %>% pivot_longer(cols=Akomba:Tsitsihy)%>% rename(Lemur=name)
+lem_secondary_edgelist_fol$value <- rescale(lem_secondary_edgelist_fol$value)*2
+lem_secondary_fol <- lem_secondary_fol[rowSums(lem_secondary_fol) != 0, ]
+net_secondary_fol <- network(as.matrix(lem_secondary_fol), directed = FALSE, bipartite = TRUE)
+
+fol_secondary_weights <-  lem_secondary_edgelist_fol$value[lem_secondary_edgelist_fol$value!=0]
+fol_secondary_weights[fol_secondary_weights >0 &fol_secondary_weights<0.1] <- 0.1
+
+network::set.edge.attribute(net_secondary_fol, attrname = "weight",fol_secondary_weights)
+network::set.vertex.attribute(net_secondary_fol, attrname = "Guild", c(rep("Plant", 17),"E. albifrons", "H. occidentalis",  "A. laniger","L. seali", "A. trichotis","M. lehilahytsara", "C. crossleyi"))
+
+secondary_net_plot_fol <- ggnet2(net_secondary_fol, edge.size = "weight", node.size = 3, node.color = "Guild", palette = c("E. albifrons"= "turquoise", 
+                                          "H. occidentalis"= "darkorchid1", 
+                                          "L. seali"="darkblue", 
+                                          "A. laniger"="slateblue2", 
+                                          "A. trichotis"= "#56B4E9", 
+                                          "M. lehilahytsara"="blue",
+                                          "C. crossleyi"="slategrey",  "Plant" = "darkgoldenrod2"), label = FALSE)+geom_point(aes(color = color), size = 3, color = "black") + geom_point(aes(color = color), size = 2.5,)+guides(color = FALSE)#+theme(panel.border = element_rect(colour = "grey", fill=NA, size=1))
+
+single_plots <- ggarrange(
+  primary_net_plot, secondary_net_plot,
+  primary_net_plot_pred, secondary_net_plot_pred,
+  primary_net_plot_fol, secondary_net_plot_fol,
+  labels = c(" a", " b", " c", " d", " e", " f"),
+  font.label = list(size = 16, color = "black"),
+  common.legend = TRUE,
+  legend = "bottom",    # 👈 add this line
+  ncol = 2,
+  nrow = 3
+)
+
+
+
+```
+
+```{r Centrality Calcualtion}
+# Define lemur node names
+lemur_names <- c("Hay.hay", "Akomba", "Tongono", "Simpona", "Fotsife", 
+                 "Fitsidika", "Tsidy", "Tsitsihy", "Kandrandra", "Bokombolo")
+
+# Function to compute PageRank centrality from a matrix and add metadata
+compute_centrality <- function(mat, sim_id, habitat, interaction) {
+  g <- graph_from_biadjacency_matrix(mat, weighted = TRUE)
+  pr <- as.data.frame(page_rank(g)$vector)
+  pr$Node <- rownames(pr)
+  colnames(pr)[1] <- "PageRank"
+  pr$Habitat <- habitat
+  pr$Interaction <- interaction
+  pr$SimID <- sim_id
+  return(pr)
+}
+
+# Loop over simulated matrices and compute centrality for each
+centrality_all <- lapply(seq_along(simulated_matrices), function(i) {
+  nets <- simulated_matrices[[i]]
+  sim_id <- i
+  do.call(rbind, list(
+    compute_centrality(nets$lem_primary, sim_id, "Primary", "Dispersal"),
+    compute_centrality(nets$lem_secondary, sim_id, "Secondary", "Dispersal"),
+    compute_centrality(nets$lem_primary_pred, sim_id, "Primary", "Predation"),
+    compute_centrality(nets$lem_secondary_pred, sim_id, "Secondary", "Predation"),
+    compute_centrality(nets$lem_primary_fol, sim_id, "Primary", "Folivory"),
+    compute_centrality(nets$lem_secondary_fol, sim_id, "Secondary", "Folivory")
+  ))
+})
+
+# Combine into a single dataframe
+pagerank_df_sim <- bind_rows(centrality_all)
+
+# Separate into lemur and plant centrality results
+centrality_sim_lemur <- pagerank_df_sim %>%
+  filter(Node %in% lemur_names)
+
+centrality_sim_plant <- pagerank_df_sim %>%
+  filter(!(Node %in% lemur_names))
+
+
+```
+
+```{r Plotting PageRank Centrality Single Layer}
+centrality_total_plant <- centrality_sim_plant %>% group_by(Node, Habitat, Interaction, SimID) %>% summarise(PageRank=mean(PageRank))%>%filter(Node!="Akomba",Node!="Tongono",Node!="Simpona",Node!="Fotsife",Node!="Fitsidika",Node!="Tsidy",Node!="Tsitsihy",Node!="Kandrandra",Node!="Bokombolo")
+
+centrality_total_plant$Interaction[centrality_total_plant$Interaction=="Folivory"] <- "Herbivory"
+
+centrality_total_plant$Interaction <- factor(centrality_total_plant$Interaction, levels = c("Dispersal", "Predation", "Herbivory"))
+centrality_total_plant$Habitat[centrality_total_plant$Habitat=="secondary"] <- "Secondary"
+
+centrality_total_plant_prop <- centrality_total_plant %>% group_by(Habitat, Interaction, SimID) %>% summarise(TotalPageRank = sum(PageRank))
+
+centrality_total_plant2 <- centrality_total_plant
+centrality_total_plant2 <- left_join(centrality_total_plant2, centrality_total_plant_prop, by =c("Habitat", "Interaction", "SimID"))%>% mutate(PropPageRank = PageRank/ TotalPageRank)
+ 
+centrality_total_plant2$Habitat <- factor(centrality_total_plant2$Habitat, levels = c("Multilayer","Secondary", "Primary"))
+
+
+centrality_summary_plant <- centrality_total_plant2 %>%
+  group_by(Node, Habitat, Interaction) %>%
+  summarise(
+    mean_PR = mean(PropPageRank, na.rm = TRUE),
+    sd_PR = sd(PropPageRank, na.rm = TRUE),
+    n = n(),
+    se_PR = sd_PR / sqrt(n)
+  ) %>%
+  ungroup()
+
+tree_centrality_plot <- ggplot(centrality_summary, aes(x = Node, y = mean_PR, fill = Habitat)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_PR - se_PR, ymax = mean_PR + se_PR),
+                position = position_dodge(width = 0.8),
+                width = 0.2) +
+  facet_grid(Interaction ~ . , scales = "free_x") +
+  labs(
+    x = "Tree Genus",
+    y = "Mean Prop. PageRank ± SE",
+    fill = "Habitat"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(size = 12, face = "bold")
+  )+
+  scale_fill_manual(values = c( "lightgoldenrod","darkseagreen3"))
+
+centrality_total_lemur <- centrality_sim_lemur %>% group_by(Node, Habitat, Interaction, SimID) %>% summarise(PageRank=mean(PageRank))%>%
+  filter(Node=="Akomba"|Node=="Tongono"|Node=="Simpona"|Node=="Fotsife"|Node=="Fitsidika"|Node=="Tsidy"|Node=="Tsitsihy"|Node=="Kandrandra"|Node=="Bokombolo")
+
+centrality_total_lemur$Interaction[centrality_total_lemur$Interaction=="Folivory"] <- "Herbivory"
+centrality_total_lemur$Interaction[centrality_total_lemur$Interaction=="Dispersal"] <- "Frugivory"
+
+centrality_total_lemur$Interaction <- factor(centrality_total_lemur$Interaction, levels = c("Frugivory", "Predation", "Herbivory"))
+centrality_total_lemur$Habitat[centrality_total_lemur$Habitat=="secondary"] <- "Secondary"
+
+centrality_total_lemur_prop <- centrality_total_lemur %>% group_by(Habitat, Interaction, SimID) %>% summarise(TotalPageRank = sum(PageRank))
+
+centrality_total_lemur2 <- centrality_total_lemur
+centrality_total_lemur2 <- left_join(centrality_total_lemur2, centrality_total_lemur_prop, by =c("Habitat", "Interaction", "SimID"))%>% mutate(PropPageRank = PageRank/ TotalPageRank)
+ 
+centrality_total_lemur2$Habitat <- factor(centrality_total_lemur2$Habitat, levels = c("Multilayer","Secondary", "Primary"))
+
+
+centrality_summary <- centrality_total_lemur2 %>%
+  group_by(Node, Habitat, Interaction) %>%
+  summarise(
+    mean_PR = mean(PropPageRank, na.rm = TRUE),
+    sd_PR = sd(PropPageRank, na.rm = TRUE),
+    n = n(),
+    se_PR = sd_PR / sqrt(n)
+  ) %>%
+  ungroup()
+
+
+
+centrality_summary_complete <- centrality_summary %>%
+  complete(Node, Habitat, Interaction, fill = list(mean_PR = 0, se_PR = 0)) 
+centrality_summary_complete <- centrality_summary_complete[centrality_summary_complete$Habitat!="Multilayer",]
+
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Akomba"] <- "E. albifrons"
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Bokombolo"] <- "H. occidentalis"
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Fitsidika"] <- "L. seali"
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Fotsife"] <- "A. laniger"
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Kandrandra"] <- "A. trichotis"
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Simpona"] <- "P. candidus"
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Tongono"] <- "E. rubriventer"
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Tsidy"] <- "M. lehilahytsara"
+centrality_summary_complete$Node[centrality_summary_complete$Node=="Tsitsihy"] <- "C. crossleyi"
+
+centrality_summary_complete$Node <- factor(centrality_summary_complete$Node, levels = c("A. trichotis", "C. crossleyi", "M. lehilahytsara", "L. seali", "A. laniger", "P. candidus", "E. albifrons", "E. rubriventer", "H. occidentalis"))
+
+
+lemur_centrality_plot <- ggplot(centrality_summary_complete, aes(x = Node, y = mean_PR, fill = Habitat)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(
+    ymin = mean_PR - 1.96 * se_PR,
+    ymax = mean_PR + 1.96 * se_PR
+  ),
+  position = position_dodge(width = 0.8),
+  width = 0.2
+  ) +
+  facet_grid(Interaction ~ ., scales = "free_x") +
+  labs(
+    x = "Lemur Species",
+    y = "Mean Prop. PageRank ± 95% CI",
+    fill = "Habitat"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(size = 12, face = "bold")
+  ) +
+  scale_fill_manual(values = c("lightgoldenrod", "darkseagreen3"))+
+  geom_vline(xintercept = 5.5, linetype= "dashed")
+
+ggsave("lemur_centrality_plot.png", plot = lemur_centrality_plot,
+       width = 8, height = 12)
+
+ggsave("tree_centrality_plot.png", plot = tree_centrality_plot,
+       width = 12, height = 8)
+
+centrality_summary_complete2 <- centrality_summary_complete %>%
+  mutate(PageRank_mean = round(mean_PR, 3), 
+         PageRank_sd = round(sd_PR, 3)) %>%
+  dplyr::select(Habitat, Node, Interaction, PageRank_mean) %>%
+  arrange(desc(Habitat)) %>%  # reverse alphabetical or factor order
+  pivot_wider(names_from = Interaction, values_from = PageRank_mean)
+ 
+centrality_summary_plant2 <- centrality_summary_plant %>%
+  mutate(PageRank_mean = round(mean_PR, 3), 
+         PageRank_sd = round(sd_PR, 3)) %>%
+  dplyr::select(Habitat, Node, Interaction, PageRank_mean) %>%
+  arrange(desc(Habitat)) %>%  # reverse alphabetical or factor order
+  pivot_wider(names_from = Interaction, values_from = PageRank_mean)
+
+write.csv(centrality_summary_complete2, "centrality_summary_complete.csv")
+write.csv(centrality_summary_plant2, "centrality_summary_complete_tree.csv")
+
+```
+
+```{r Plant Traits}
+
+plant_uses$UseSum <- plant_uses$UseSum/81
+
+#HUMAN USES
+#Building/ cleaning dataframes
+centrality_plant2 <- centrality_sim_plant %>% rename("Genus"="Node") #%>% group_by(Node) %>% summarise(PageRank=sum(PageRank))
+plant_uses2 <- plant_uses
+plant_uses3 <- left_join(centrality_plant2, plant_uses2, by = "Genus") %>%
+  group_by(Habitat, Interaction, Genus) %>%
+  summarise(Humans_use = mean(Humans_use, na.rm = TRUE), PageRank = mean(PageRank, na.rm = TRUE),  UseSum = mean(UseSum, na.rm = TRUE),.groups = "drop")
+
+
+plant_uses3$Genus[plant_uses3$Genus=="Mantalania "] <- "Mantalania"
+
+ggplot(data = plant_uses3, aes(x=log(PageRank)))+geom_histogram()
+
+#Fruit Lengths
+centrality_plant_single_ft2 <- left_join(plant_uses3, fruit_lengths, by="Genus")
+centrality_plant_single_ft2 <- left_join(centrality_plant_single_ft2, tree_size, by="Genus")
+centrality_plant_single_ft2 <- left_join(centrality_plant_single_ft2, wood_density, by="Genus")
+endemism <- plant_names %>% dplyr::select(Genus, Endemic)%>% distinct()%>%drop_na()
+
+centrality_plant_single_ft2
+
+endemism <- endemism %>% dplyr::select(Genus, Endemic) %>% distinct()
+
+centrality_plant_ft2 <- left_join(centrality_plant_ft2, endemism, by ="Genus")
+centrality_plant_ft2 <- left_join(centrality_plant_ft2, seed_mass, by ="Genus")
+
+centrality_plant_ft2 <- centrality_plant_ft2 %>% filter(Genus != "sp10") %>% filter(Genus!="Akomba",Genus!="Tongono",Genus!="Simpona",Genus!="Fotsife",Genus!="Fitsidika",Genus!="Tsidy",Genus!="Tsitsihy",Genus!="Kandrandra", Genus!="Bokombolo")
+
+centrality_plant_single_ft2 <- centrality_plant_single_ft2 %>% filter(Genus != "sp10")
+
+centrality_plant_single_ft2 <- left_join(centrality_plant_single_ft2, endemism, by ="Genus")%>% filter(Genus!="Akomba",Genus!="Tongono",Genus!="Simpona",Genus!="Fotsife",Genus!="Fitsidika",Genus!="Tsidy",Genus!="Tsitsihy",Genus!="Kandrandra", Genus!="Bokombolo")
+centrality_plant_single_ft2 <-left_join(centrality_plant_single_ft2 , seed_mass, by ="Genus")
+
+```
+
+```{r PGLS Human Use}
+
+pgls_function_human <- function(data, interaction, habitat){
+  
+plant_trait_data <- data[data$Interaction==interaction&data$Habitat==habitat,] %>% drop_na(Humans_use) %>% filter(Genus !="Plagioscyphus")
+  
+plants <- plant_trait_data %>% dplyr::select(Genus, Family) %>% distinct()
+colnames(plants) <- c("genus", "family")
+plants$species <- plants$genus
+plants$spp <- "sp"
+plants <- unite(data=plants, "species", species, spp, sep = " ")
+plants <- plants %>% dplyr::select(species, genus, family)
+y <- phylo.maker(plants, scenarios = "S3") # default scenario
+tree_plants <- y$scenario.3
+
+
+length(unique(tree_plants$tip.label))
+tree_plants$node.label <- NULL
+
+plant_trait_data$Binomial <- paste0(plant_trait_data $Genus,"_sp")
+
+plant_trait_data <- as.data.frame(plant_trait_data)
+
+plant_trait_data_comp <- caper::comparative.data(phy = tree_plants, data = plant_trait_data , names.col = Binomial, vcv = TRUE, na.omit = FALSE, warn.dropped = TRUE)
+
+model.pgls <- pgls(log(PageRank)~ Humans_use, data = plant_trait_data_comp, lambda
+='ML')
+return(summary(model.pgls))
+
+ms1 <- dredge(model.pgls)
+ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+return(as.data.frame(ms1_summary$coefmat.full))
+#plot(ms1)
+}
+
+#human use richness
+
+pgls_function_human_rich <- function(data, interaction, habitat){
+  
+plant_trait_data <- data[data$Interaction==interaction&data$Habitat==habitat,] %>% drop_na(Humans_use) %>% filter(Genus !="Plagioscyphus")
+  
+plants <- plant_trait_data %>% dplyr::select(Genus, Family) %>% distinct()
+colnames(plants) <- c("genus", "family")
+plants$species <- plants$genus
+plants$spp <- "sp"
+plants <- unite(data=plants, "species", species, spp, sep = " ")
+plants <- plants %>% dplyr::select(species, genus, family)
+y <- phylo.maker(plants, scenarios = "S3") # default scenario
+tree_plants <- y$scenario.3
+
+length(unique(tree_plants$tip.label))
+tree_plants$node.label <- NULL
+
+plant_trait_data$Binomial <- paste0(plant_trait_data $Genus,"_sp")
+
+plant_trait_data <- as.data.frame(plant_trait_data)
+
+plant_trait_data_comp <- caper::comparative.data(phy = tree_plants, data = plant_trait_data , names.col = Binomial, vcv = TRUE, na.omit = FALSE, warn.dropped = TRUE)
+
+model.pgls <- pgls(log(PageRank)~ UseSum, data = plant_trait_data_comp, lambda
+='ML')
+return(summary(model.pgls))
+
+ms1 <- dredge(model.pgls)
+ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+return(as.data.frame(ms1_summary$coefmat.full))
+#plot(ms1)
+}
+
+centrality_plant_single_ft2 <- as.data.frame(centrality_plant_single_ft2)
+
+pgls_disp_prim_use <- pgls_function_human(centrality_plant_single_ft2, "Dispersal", "Primary")
+pgls_disp_sec_use <- pgls_function_human(centrality_plant_single_ft2,"Dispersal", "Secondary")
+
+pgls_pred_prim_use <- pgls_function_human(centrality_plant_single_ft2,"Predation", "Primary")
+pgls_pred_sec_use <- pgls_function_human(centrality_plant_single_ft2,"Predation", "Secondary")
+
+pgls_fol_prim_use <- pgls_function_human(centrality_plant_single_ft2,"Folivory", "Primary")
+pgls_fol_sec_use <- pgls_function_human(centrality_plant_single_ft2,"Folivory", "Secondary")
+
+
+pgls_disp_prim_use_rich <- pgls_function_human_rich(centrality_plant_single_ft2, "Dispersal", "Primary")
+pgls_disp_sec_use_rich <- pgls_function_human_rich(centrality_plant_single_ft2,"Dispersal", "Secondary")
+
+pgls_pred_prim_use_rich <- pgls_function_human_rich(centrality_plant_single_ft2,"Predation", "Primary")
+pgls_pred_sec_use_rich <- pgls_function_human_rich(centrality_plant_single_ft2,"Predation", "Secondary")
+
+pgls_fol_prim_use_rich <- pgls_function_human_rich(centrality_plant_single_ft2,"Folivory", "Primary")
+pgls_fol_sec_use_rich <- pgls_function_human_rich(centrality_plant_single_ft2,"Folivory", "Secondary")
+
+
+```
+
+```{r PGLS Plotting Human Use}
+
+pgls_disp_prim_df_use <- as.data.frame(pgls_disp_prim_use$coefficients)
+pgls_disp_sec_df_use <- as.data.frame(pgls_disp_sec_use$coefficients)
+pgls_pred_prim_df_use <- as.data.frame(pgls_pred_prim_use$coefficients)
+pgls_pred_sec_df_use <- as.data.frame(pgls_pred_sec_use$coefficients)
+pgls_fol_prim_df_use <- as.data.frame(pgls_fol_prim_use$coefficients)
+pgls_fol_sec_df_use <- as.data.frame(pgls_fol_sec_use$coefficients)
+
+pgls_disp_prim_df_use$Variable <- rownames(pgls_disp_prim_df_use) 
+pgls_disp_sec_df_use$Variable <- rownames(pgls_disp_sec_df_use)  
+pgls_pred_prim_df_use$Variable <- rownames(pgls_pred_prim_df_use) 
+pgls_pred_sec_df_use$Variable <- rownames(pgls_pred_sec_df_use) 
+pgls_fol_prim_df_use$Variable <- rownames(pgls_fol_prim_df_use) 
+pgls_fol_sec_df_use$Variable <- rownames(pgls_fol_sec_df_use) 
+
+pgls_disp_prim_df_use$Habitat <- "Primary"
+pgls_disp_prim_df_use$Interaction <- "Dispersal"
+pgls_disp_sec_df_use$Habitat <- "Secondary"
+pgls_disp_sec_df_use$Interaction <- "Dispersal"
+pgls_pred_prim_df_use$Habitat <- "Primary"
+pgls_pred_prim_df_use$Interaction <- "Predation"
+pgls_pred_sec_df_use$Habitat <- "Secondary"
+pgls_pred_sec_df_use$Interaction <- "Predation"
+pgls_fol_prim_df_use$Habitat <- "Primary"
+pgls_fol_prim_df_use$Interaction <- "Herbivory"
+pgls_fol_sec_df_use$Habitat <- "Secondary"
+pgls_fol_sec_df_use$Interaction <- "Herbivory"
+
+pgls_df_use <- rbind(
+                 pgls_disp_prim_df_use, pgls_disp_sec_df_use,
+                 pgls_pred_prim_df_use, pgls_pred_sec_df_use,
+                 pgls_fol_prim_df_use, pgls_fol_sec_df_use)
+
+pgls_df_use$Lower <- pgls_df_use$Estimate - 1.96 * pgls_df_use$`Std. Error`
+pgls_df_use$Upper <- pgls_df_use$Estimate + 1.96 * pgls_df_use$`Std. Error`
+pgls_df_use$Lower90 <- pgls_df_use$Estimate - 1.644854 * pgls_df_use$`Std. Error`
+pgls_df_use$Upper90 <- pgls_df_use$Estimate + 1.644854 * pgls_df_use$`Std. Error`
+
+pgls_df_summary_use <- pgls_df_use
+
+pgls_df_use <- pgls_df_use %>% filter(Variable != "(Intercept)")
+pgls_df_use$Variable[pgls_df_use$Variable=="Humans_use"] <- "Human Use Proportion"
+pgls_df_use$Interaction[pgls_df_use$Interaction=="Dispersal"] <-"Frugivory"
+pgls_df_use$Interaction<- factor(pgls_df_use$Interaction, levels = c("Dispersal", "Predation", "Herbivory"))
+
+human_use_plot2 <- ggplot(data=pgls_df_use, aes(x=Interaction, y= Estimate, ymin=Lower, ymax=Upper, shape=Variable, color=Habitat))+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  geom_pointrange(position = position_dodge(0.5), size=0.7, lwd=0.7)+
+  geom_linerange(aes(x= Interaction, y= Estimate, ymin=Lower90, ymax=Upper90,  shape=Variable, color=Habitat), position = position_dodge(0.5), linewidth=1.5)+
+  theme_classic()+
+  ylab("Estimate")+
+  scale_color_manual(values = c( "darkseagreen3", "lightgoldenrod"))+
+  theme(legend.position="bottom")+
+  xlab("Land Use Type")+ 
+  theme(legend.position="none")
+
+
+
+pgls_disp_prim_df_use_rich <- as.data.frame(pgls_disp_prim_use_rich$coefficients)
+pgls_disp_sec_df_use_rich <- as.data.frame(pgls_disp_sec_use_rich$coefficients)
+pgls_pred_prim_df_use_rich <- as.data.frame(pgls_pred_prim_use_rich$coefficients)
+pgls_pred_sec_df_use_rich <- as.data.frame(pgls_pred_sec_use_rich$coefficients)
+pgls_fol_prim_df_use_rich <- as.data.frame(pgls_fol_prim_use_rich$coefficients)
+pgls_fol_sec_df_use_rich <- as.data.frame(pgls_fol_sec_use_rich$coefficients)
+
+pgls_disp_prim_df_use_rich$Variable <- rownames(pgls_disp_prim_df_use_rich) 
+pgls_disp_sec_df_use_rich$Variable <- rownames(pgls_disp_sec_df_use_rich)  
+pgls_pred_prim_df_use_rich$Variable <- rownames(pgls_pred_prim_df_use_rich) 
+pgls_pred_sec_df_use_rich$Variable <- rownames(pgls_pred_sec_df_use_rich) 
+pgls_fol_prim_df_use_rich$Variable <- rownames(pgls_fol_prim_df_use_rich) 
+pgls_fol_sec_df_use_rich$Variable <- rownames(pgls_fol_sec_df_use_rich) 
+
+pgls_disp_prim_df_use_rich$Habitat <- "Primary"
+pgls_disp_prim_df_use_rich$Interaction <- "Dispersal"
+pgls_disp_sec_df_use_rich$Habitat <- "Secondary"
+pgls_disp_sec_df_use_rich$Interaction <- "Dispersal"
+pgls_pred_prim_df_use_rich$Habitat <- "Primary"
+pgls_pred_prim_df_use_rich$Interaction <- "Predation"
+pgls_pred_sec_df_use_rich$Habitat <- "Secondary"
+pgls_pred_sec_df_use_rich$Interaction <- "Predation"
+pgls_fol_prim_df_use_rich$Habitat <- "Primary"
+pgls_fol_prim_df_use_rich$Interaction <- "Herbivory"
+pgls_fol_sec_df_use_rich$Habitat <- "Secondary"
+pgls_fol_sec_df_use_rich$Interaction <- "Herbivory"
+
+pgls_df_use_rich <- rbind(
+                 pgls_disp_prim_df_use_rich, pgls_disp_sec_df_use_rich,
+                 pgls_pred_prim_df_use_rich, pgls_pred_sec_df_use_rich,
+                 pgls_fol_prim_df_use_rich, pgls_fol_sec_df_use_rich)
+
+pgls_df_use_rich$Lower <- pgls_df_use_rich$Estimate - 1.96 * pgls_df_use_rich$`Std. Error`
+pgls_df_use_rich$Upper <- pgls_df_use_rich$Estimate + 1.96 * pgls_df_use_rich$`Std. Error`
+pgls_df_use_rich$Lower90 <- pgls_df_use_rich$Estimate - 1.644854 * pgls_df_use_rich$`Std. Error`
+pgls_df_use_rich$Upper90 <- pgls_df_use_rich$Estimate + 1.644854 * pgls_df_use_rich$`Std. Error`
+
+pgls_df_summary_use_rich <- pgls_df_use_rich
+
+pgls_df_use_rich <- pgls_df_use_rich %>% filter(Variable != "(Intercept)")
+pgls_df_use_rich$Variable[pgls_df_use_rich$Variable=="UseSum"] <- "Human Use Sum"
+pgls_df_use_rich$Interaction[pgls_df_use_rich$Interaction=="Dispersal"] <- "Frugivory"
+pgls_df_use_rich$Interaction<- factor(pgls_df_use_rich$Interaction, levels = c("Frugivory", "Predation", "Herbivory"))
+
+human_use_rich_plot2 <- ggplot(data=pgls_df_use_rich, aes(x=Interaction, y= Estimate, ymin=Lower, ymax=Upper, shape=Variable, color=Habitat))+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  geom_pointrange(position = position_dodge(0.5), size=0.7, lwd=0.7)+
+  geom_linerange(aes(x= Interaction, y= Estimate, ymin=Lower90, ymax=Upper90,  shape=Variable, color=Habitat), position = position_dodge(0.5), linewidth=1.5)+
+  theme_classic()+
+  ylab("Estimate")+
+  scale_color_manual(values = c("darkseagreen3", "lightgoldenrod"))+
+  theme(legend.position="bottom")+
+  xlab("Land Use Type")+ 
+  theme(legend.position="none")
+
+human_use_plot <- ggarrange(human_use_plot2, human_use_rich_plot2,labels = c("a", "b"))
+
+
+pgls_df_use2 <- rbind(pgls_df_use, pgls_df_use_rich) %>% dplyr::select(Habitat, Interaction, Variable, Estimate, Lower, Upper, `Pr(>|t|)`)
+pgls_df_use2 <- pgls_df_use2[order(pgls_df_use2$Interaction), ]
+pgls_df_use2 <- pgls_df_use2[order(pgls_df_use2$Habitat), ]
+pgls_df_use2 <- pgls_df_use2[order(pgls_df_use2$Variable), ]
+pgls_df_use2$Estimate <- round(pgls_df_use2$Estimate, 3)
+pgls_df_use2$Lower <- round(pgls_df_use2$Lower, 3)
+pgls_df_use2$Upper <- round(pgls_df_use2$Upper, 3)
+pgls_df_use2$`Pr(>|t|)` <- round(pgls_df_use2$`Pr(>|t|)`, 3)
+pgls_df_use2 <- pgls_df_use2 %>% dplyr::select(Variable, Interaction, Habitat, Variable, Estimate, `Pr(>|t|)`)
+pgls_df_use2$Interaction[is.na(pgls_df_use2$Interaction)] <- "Frugivory"
+pgls_df_use2 <- pgls_df_use2 %>%
+  arrange( Variable, Interaction)
+
+
+write.csv(pgls_df_use2, file=paste0(save_path, "pgls_df_use.csv"))
+
+ggsave("human_use_plot_new.png", plot = human_use_plot,
+       width = 8, height = 4)
+
+
+
+
+```
+
+```{r PGLS Ecological}
+
+pgls_function <- function(data, interaction, habitat){
+  
+plant_trait_data <- data[data$Interaction==interaction&data$Habitat==habitat,]
+  
+plants <- plant_trait_data %>% dplyr::select(Genus, Family) %>% distinct()
+colnames(plants) <- c("genus", "family")
+plants$species <- plants$genus
+plants$spp <- "sp"
+plants <- unite(data=plants, "species", species, spp, sep = " ")
+plants <- plants %>% dplyr::select(species, genus, family)
+y <- phylo.maker(plants, scenarios = "S3") # default scenario
+tree_plants <- y$scenario.3
+
+
+length(unique(tree_plants$tip.label))
+tree_plants$node.label <- NULL
+
+plant_trait_data $Binomial <- paste0(plant_trait_data $Genus,"_sp")
+plant_trait_data_comp <- caper::comparative.data(phy = tree_plants, data = plant_trait_data , names.col = Binomial, vcv = TRUE, na.omit = FALSE, warn.dropped = TRUE)
+
+model.pgls <- pgls(log(PageRank)~ FruitLength + DBH + meanWD + Endemic, data = plant_trait_data_comp, lambda
+='ML')
+return(summary(model.pgls))
+
+ms1 <- dredge(model.pgls)
+ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+importance_vals <- sw(ms1)
+ return(list(
+    coefficients = coef_table,
+    importance = importance_vals
+  ))
+#plot(ms1)
+}
+
+
+
+
+pgls_function_pred <- function(data, interaction, habitat){
+  
+plant_trait_data <- data[data$Interaction==interaction&data$Habitat==habitat,]
+  
+plants <- plant_trait_data %>% dplyr::select(Genus, Family) %>% distinct()
+colnames(plants) <- c("genus", "family")
+plants$species <- plants$genus
+plants$spp <- "sp"
+plants <- unite(data=plants, "species", species, spp, sep = " ")
+plants <- plants %>% dplyr::select(species, genus, family)
+y <- phylo.maker(plants, scenarios = "S3") # default scenario
+tree_plants <- y$scenario.3
+#tree_plants$tip.label <- gsub("_sp", "", tree_plants$tip.label)
+#plot(tree_plants)
+
+length(unique(tree_plants$tip.label))
+tree_plants$node.label <- NULL
+
+plant_trait_data $Binomial <- paste0(plant_trait_data $Genus,"_sp")
+plant_trait_data_comp <- caper::comparative.data(phy = tree_plants, data = plant_trait_data , names.col = Binomial, vcv = TRUE, na.omit = FALSE, warn.dropped = TRUE)
+
+model.pgls <- pgls(log(PageRank)~ mass + DBH + meanWD + Endemic, data = plant_trait_data_comp, lambda
+='ML')
+return(summary(model.pgls))
+
+ms1 <- dredge(model.pgls)
+ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+return(as.data.frame(ms1_summary$coefmat.full))
+#plot(ms1)
+}
+
+
+
+pgls_function_fol <- function(data, interaction, habitat){
+  
+plant_trait_data <- data[data$Interaction==interaction&data$Habitat==habitat,]
+  
+plants <- plant_trait_data %>% dplyr::select(Genus, Family) %>% distinct()
+colnames(plants) <- c("genus", "family")
+plants$species <- plants$genus
+plants$spp <- "sp"
+plants <- unite(data=plants, "species", species, spp, sep = " ")
+plants <- plants %>% dplyr::select(species, genus, family)
+y <- phylo.maker(plants, scenarios = "S3") # default scenario
+tree_plants <- y$scenario.3
+#tree_plants$tip.label <- gsub("_sp", "", tree_plants$tip.label)
+#plot(tree_plants)
+
+length(unique(tree_plants$tip.label))
+tree_plants$node.label <- NULL
+
+tree2 <- read.tree("~/Downloads/TreePL_mada_gen_03012024.tre")
+
+plant_trait_data$Binomial <- paste0(plant_trait_data$Genus,"_sp")
+plant_trait_data_comp <- caper::comparative.data(phy = tree_plants, data = plant_trait_data, names.col = Binomial, vcv = TRUE, na.omit = FALSE, warn.dropped = TRUE)
+
+model.pgls <- pgls(log(PageRank)~ meanWD + Endemic + DBH, data = plant_trait_data_comp, lambda
+='ML')
+return(summary(model.pgls))
+
+ms1 <- dredge(model.pgls)
+ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+return(as.data.frame(ms1_summary$coefmat.full))
+#plot(ms1)
+}
+
+
+#pgls_disp_mult <- pgls_function(centrality_plant_ft2, "Dispersal", "Multilayer") #0.0, small signal
+#pgls_pred_mult <- pgls_function_pred(centrality_plant_ft2,"Predation", "Multilayer") #0.211
+#pgls_fol_mult <- pgls_function_fol(centrality_plant_ft2,"Folivory", "Multilayer")#0.575
+
+centrality_plant_single_ft2 <- as.data.frame(centrality_plant_single_ft2 )
+
+pgls_disp_prim <- pgls_function(centrality_plant_single_ft2, "Dispersal", "Primary")# 0.135 (0-0.765)
+
+pgls_disp_sec <- pgls_function(centrality_plant_single_ft2,"Dispersal", "Secondary")#0.060 (0-0.766)
+
+pgls_pred_prim <- pgls_function_pred(centrality_plant_single_ft2,"Predation", "Primary")#0.439 (0-1)
+pgls_pred_sec <- pgls_function_pred(centrality_plant_single_ft2,"Predation", "Secondary")# 0 (0-1)
+
+pgls_fol_prim <- pgls_function_fol(centrality_plant_single_ft2,"Folivory", "Primary")#0 (0-1)
+pgls_fol_sec <- pgls_function_fol(centrality_plant_single_ft2,"Folivory", "Secondary")#0.0 (0-1)
+
+
+```
+
+```{r PGLS Plotting Ecological}
+
+
+pgls_disp_prim_df <- as.data.frame(pgls_disp_prim$coefficients)
+pgls_disp_sec_df <- as.data.frame(pgls_disp_sec$coefficients)
+pgls_pred_prim_df <- as.data.frame(pgls_pred_prim$coefficients)
+pgls_pred_sec_df <- as.data.frame(pgls_pred_sec$coefficients)
+pgls_fol_prim_df <- as.data.frame(pgls_fol_prim$coefficients)
+pgls_fol_sec_df <- as.data.frame(pgls_fol_sec$coefficients)
+
+pgls_disp_prim_df$Variable <- rownames(pgls_disp_prim_df) 
+pgls_disp_sec_df$Variable <- rownames(pgls_disp_sec_df)  
+pgls_pred_prim_df$Variable <- rownames(pgls_pred_prim_df) 
+pgls_pred_sec_df$Variable <- rownames(pgls_pred_sec_df) 
+pgls_fol_prim_df$Variable <- rownames(pgls_fol_prim_df) 
+pgls_fol_sec_df$Variable <- rownames(pgls_fol_sec_df) 
+
+pgls_disp_prim_df$Habitat <- "Primary"
+pgls_disp_prim_df$Interaction <- "Dispersal"
+pgls_disp_sec_df$Habitat <- "Secondary"
+pgls_disp_sec_df$Interaction <- "Dispersal"
+pgls_pred_prim_df$Habitat <- "Primary"
+pgls_pred_prim_df$Interaction <- "Predation"
+pgls_pred_sec_df$Habitat <- "Secondary"
+pgls_pred_sec_df$Interaction <- "Predation"
+pgls_fol_prim_df$Habitat <- "Primary"
+pgls_fol_prim_df$Interaction <- "Herbivory"
+pgls_fol_sec_df$Habitat <- "Secondary"
+pgls_fol_sec_df$Interaction <- "Herbivory"
+
+pgls_df <- rbind(
+                 pgls_disp_prim_df, pgls_disp_sec_df,
+                 pgls_pred_prim_df, pgls_pred_sec_df,
+                 pgls_fol_prim_df, pgls_fol_sec_df)
+
+pgls_df$Lower <- pgls_df$Estimate - 1.96 * pgls_df$`Std. Error`
+pgls_df$Upper <- pgls_df$Estimate + 1.96 * pgls_df$`Std. Error`
+pgls_df$Lower90 <- pgls_df$Estimate - 1.644854 * pgls_df$`Std. Error`
+pgls_df$Upper90 <- pgls_df$Estimate + 1.644854 * pgls_df$`Std. Error`
+
+pgls_df_summary <- pgls_df
+
+pgls_df <- pgls_df %>% filter(Variable != "(Intercept)")
+pgls_df$Variable[pgls_df$Variable=="EndemicYes"] <- "Endemic"
+pgls_df$Variable[pgls_df$Variable=="meanWD"] <- "WD"
+pgls_df$Variable[pgls_df$Variable=="FruitLength"] <- "Fruit Length"
+pgls_df$Variable[pgls_df$Variable=="mass"] <- "Seed Mass"
+
+pgls_df$Interaction[pgls_df$Interaction=="Dispersal"] <- "Frugivory"
+
+dispersal_functional_plot <- ggplot(data=pgls_df[pgls_df$Interaction=="Frugivory",], aes(x=Habitat, y= Estimate, ymin=Lower, ymax=Upper, shape=Variable, color=Habitat))+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  geom_pointrange(position = position_dodge(0.5), size=0.7, lwd=0.7)+
+  geom_linerange(aes(x= Habitat, y= Estimate, ymin=Lower90, ymax=Upper90,  shape=Variable, color=Habitat), position = position_dodge(0.5), linewidth=1.5)+
+  theme_classic()+
+  ylab("Estimate")+
+  scale_color_manual(values = c( "darkseagreen3", "lightgoldenrod"))+
+  scale_shape_manual(values=c(19,15, 17,18),name = NULL)+ guides(color = FALSE, alpha=FALSE)+
+  theme(legend.position="bottom")+
+  xlab("Land Use Type")
+
+predation_functional_plot <- ggplot(data=pgls_df[pgls_df$Interaction=="Predation",], aes(x=Habitat, y= Estimate, ymin=Lower, ymax=Upper, shape=Variable, color=Habitat))+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  geom_pointrange(position = position_dodge(0.5), size=0.7, lwd=0.7)+
+  geom_linerange(aes(x= Habitat, y= Estimate, ymin=Lower90, ymax=Upper90,  shape=Variable, color=Habitat), position = position_dodge(0.5), linewidth=1.5)+
+  theme_classic()+
+  ylab("Estimate")+
+  scale_color_manual(values = c( "darkseagreen3", "lightgoldenrod"))+
+  scale_shape_manual(values=c(19,15, 8,18),name = NULL)+ guides(color = FALSE, alpha=FALSE)+
+  theme(legend.position="bottom")+
+  xlab("Land Use Type")
+
+folivory_functional_plot <- ggplot(data=pgls_df[pgls_df$Interaction=="Herbivory",], aes(x=Habitat, y= Estimate, ymin=Lower, ymax=Upper, shape=Variable, color=Habitat))+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  geom_pointrange(position = position_dodge(0.5), size=0.7, lwd=0.7)+
+  geom_linerange(aes(x= Habitat, y= Estimate, ymin=Lower90, ymax=Upper90,  shape=Variable, color=Habitat), position = position_dodge(0.5), linewidth=1.5)+
+  theme_classic()+
+  ylab("Estimate")+
+  scale_color_manual(values = c( "darkseagreen3", "lightgoldenrod"))+
+  scale_shape_manual(values=c(19,15,18),name = NULL)+ guides(color = FALSE, alpha=FALSE)+
+  theme(legend.position="bottom")+
+  xlab("Land Use Type")
+
+pglm_plot <- ggarrange(dispersal_functional_plot, predation_functional_plot, folivory_functional_plot, ncol=1, labels = c("a", "b", "c"), common.legend = TRUE)
+
+trait_plot <- ggarrange(human_use_plot, pglm_plot, ncol=1, heights = c(1,3), labels = c("a",""))
+
+trait_plot2 <- ggarrange(human_use_plot, dispersal_functional_plot, predation_functional_plot, folivory_functional_plot, labels = c("a","b", "c", "d"))
+
+pgls_df2 <- pgls_df %>% mutate(Estimate= round(Estimate,3), `Std. Error`= round(`Std. Error`,3), `Pr(>|t|)` = round(`Pr(>|t|)`,3)) %>% dplyr::select(Habitat, Interaction, Variable, Estimate, `Std. Error`,`Pr(>|t|)`)
+
+pgls_df2_summary <- pgls_df_summary %>% mutate(Estimate= round(Estimate,3), `Std. Error`= round(`Std. Error`,3), `Pr(>|t|)` = round(`Pr(>|t|)`,3)) %>% dplyr::select(Habitat, Interaction, Variable, Estimate, `Std. Error`,`Pr(>|t|)`)
+
+pgls_df3 <- pgls_df2_summary[order(pgls_df2_summary$Habitat),]
+
+write.csv(pgls_df3, file=paste0(save_path, "pgls_df.csv"))
+
+
+ggsave("pglm_plot_ecotraits.png", plot = pglm_plot,
+       width = 4, height = 7)
+
+pgls_df2 <- pgls_df %>% mutate(Estimate = round(Estimate, 3), `Std. Error` = round(`Std. Error`, 3), `Pr(>|t|)` = round(`Pr(>|t|)`, 3)) %>% dplyr::select(Interaction,Habitat,  Variable, Estimate, `Std. Error`, `Pr(>|t|)`)
+
+write.csv(pgls_df2 , "pgls_df2.csv")
+
+
+```
+
+```{r Lambda}
+
+l_disp_prim_df <- as.data.frame(pgls_disp_prim$param.CI$lambda)
+l_disp_sec_df <- as.data.frame(pgls_disp_sec$param.CI$lambda)
+l_pred_prim_df <- as.data.frame(pgls_pred_prim$param.CI$lambda)
+l_pred_sec_df <- as.data.frame(pgls_pred_sec$param.CI$lambda)
+l_fol_prim_df <- as.data.frame(pgls_fol_prim$param.CI$lambda)
+l_fol_sec_df <- as.data.frame(pgls_fol_sec$param.CI$lambda)
+
+```
