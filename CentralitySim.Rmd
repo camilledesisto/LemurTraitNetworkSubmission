@@ -246,6 +246,60 @@ for (sim_id in 1:100) {
 
 
 
+
+
+# Function to compute edge-level statistics
+calculate_edge_stats <- function(mat) {
+  weights <- mat[mat > 0]
+  if (length(weights) == 0) {
+    return(data.frame(
+      edge_count = 0,
+      total_weight = 0,
+      mean_weight = NA,
+      density = 0,
+      cv_weight = NA,
+      prop_strong = NA
+    ))
+  }
+  data.frame(
+    edge_count = length(weights),
+    total_weight = sum(weights),
+    mean_weight = mean(weights),
+    density = length(weights) / (nrow(mat) * ncol(mat)),
+    cv_weight = sd(weights) / mean(weights),
+    prop_strong = sum(weights > quantile(weights, 0.75)) / length(weights)
+  )
+}
+
+
+# Loop through all simulations and all matrices
+all_edge_stats <- lapply(seq_along(simulated_matrices), function(sim_id) {
+  sim <- simulated_matrices[[sim_id]]
+  
+  lapply(names(sim), function(name) {
+    stats <- calculate_edge_stats(sim[[name]])
+    stats$Matrix <- name
+    stats$SimID <- sim_id
+    return(stats)
+  }) %>% bind_rows()
+}) %>% bind_rows()
+
+
+summary_edge_stats_genus_level <- all_edge_stats %>%
+  group_by(Matrix) %>%
+  summarise(
+    mean_edge_count = mean(edge_count, na.rm = TRUE),
+    mean_total_weight = mean(total_weight, na.rm = TRUE),
+    mean_mean_weight = mean(mean_weight, na.rm = TRUE),
+    mean_density = mean(density, na.rm = TRUE),
+    mean_cv_weight = mean(cv_weight, na.rm = TRUE),
+    mean_prop_strong = mean(prop_strong, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+
+
 ```
 
 ```{r Plot single-layer networks}
@@ -666,9 +720,9 @@ model.pgls <- pgls(log(PageRank)~ Humans_use, data = plant_trait_data_comp, lamb
 ='ML')
 return(summary(model.pgls))
 
-ms1 <- dredge(model.pgls)
-ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
-return(as.data.frame(ms1_summary$coefmat.full))
+#ms1 <- dredge(model.pgls)
+#ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+#return(as.data.frame(ms1_summary$coefmat.full))
 #plot(ms1)
 }
 
@@ -700,9 +754,9 @@ model.pgls <- pgls(log(PageRank)~ UseSum, data = plant_trait_data_comp, lambda
 ='ML')
 return(summary(model.pgls))
 
-ms1 <- dredge(model.pgls)
-ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
-return(as.data.frame(ms1_summary$coefmat.full))
+#ms1 <- dredge(model.pgls)
+#ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+#return(as.data.frame(ms1_summary$coefmat.full))
 #plot(ms1)
 }
 
@@ -897,13 +951,13 @@ model.pgls <- pgls(log(PageRank)~ FruitLength + DBH + meanWD + Endemic, data = p
 ='ML')
 return(summary(model.pgls))
 
-ms1 <- dredge(model.pgls)
-ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
-importance_vals <- sw(ms1)
- return(list(
-    coefficients = coef_table,
-    importance = importance_vals
-  ))
+#ms1 <- dredge(model.pgls)
+#ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+#importance_vals <- sw(ms1)
+# return(list(
+ #   coefficients = coef_table,
+ #   importance = importance_vals
+ # ))
 #plot(ms1)
 }
 
@@ -935,9 +989,9 @@ model.pgls <- pgls(log(PageRank)~ mass + DBH + meanWD + Endemic, data = plant_tr
 ='ML')
 return(summary(model.pgls))
 
-ms1 <- dredge(model.pgls)
-ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
-return(as.data.frame(ms1_summary$coefmat.full))
+#ms1 <- dredge(model.pgls)
+#ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+#return(as.data.frame(ms1_summary$coefmat.full))
 #plot(ms1)
 }
 
@@ -970,9 +1024,9 @@ model.pgls <- pgls(log(PageRank)~ meanWD + Endemic + DBH, data = plant_trait_dat
 ='ML')
 return(summary(model.pgls))
 
-ms1 <- dredge(model.pgls)
-ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
-return(as.data.frame(ms1_summary$coefmat.full))
+#ms1 <- dredge(model.pgls)
+#ms1_summary <- summary(model.avg(get.models(ms1,subset=TRUE ))) 
+#return(as.data.frame(ms1_summary$coefmat.full))
 #plot(ms1)
 }
 
